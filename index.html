@@ -619,9 +619,23 @@ async function archiveFinal(){
     const { error } = await sb.from("deals").update({ final_path:path, final_sha256:S.finalHash, status:"signed", signed_at:new Date().toISOString() }).eq("id", S.dealId);
     if (error) throw error;
     await audit("completed", { final_sha256:S.finalHash, pages:S.pageSizes.length + (S.protoPages||1) });
-    m.textContent = "Im Archiv gespeichert.";
-    sendContract(false);
-  } catch(e) { console.error(e); m.classList.add("err"); m.textContent = "Archivierung fehlgeschlagen: " + (e.message||e) + ". Bitte PDF zusätzlich speichern."; }
+    m.textContent = "Im Archiv gespeichert. Wird versiegelt …";
+  } catch(e) { console.error(e); m.classList.add("err"); m.textContent = "Archivierung fehlgeschlagen: " + (e.message||e) + ". Bitte PDF zusätzlich speichern."; return; }
+  await sealContract();
+  sendContract(false);
+}
+/* Siegel + Zeitstempel (Edge Function seal-contract); bei Fehler geht das unversiegelte PDF raus */
+async function sealContract(){
+  const m = $("#archMsg");
+  try {
+    const { data, error } = await sb.functions.invoke("seal-contract", { body: { deal_id:S.dealId } });
+    if (error){ let msg = error.message; try { msg = (await error.context.json()).error || msg; } catch {} throw new Error(msg); }
+    const dl = await sb.storage.from("contracts").download(S.dealId + "/sealed.pdf");
+    if (!dl.error) S.sealed = new Uint8Array(await dl.data.arrayBuffer());
+    m.textContent = data.timestamped ? "Im Archiv gespeichert, versiegelt und mit Zeitstempel versehen." : "Im Archiv gespeichert und versiegelt (ohne Zeitstempel, Dienst nicht erreichbar).";
+    const dd = [...$("#summary").querySelectorAll("dt")].find(d => d.textContent === "Siegel")?.nextElementSibling;
+    if (dd) dd.textContent = short(data.sealed_sha256) + (data.timestamped ? " · Zeitstempel" : "");
+  } catch(e){ console.error(e); m.classList.add("err"); m.textContent = "Im Archiv gespeichert, Versiegeln fehlgeschlagen: " + (e.message||e); }
 }
 
 $("#loadSample").addEventListener("click", async () => { readMeta(); S.parts = null; const s = await makeSample(S.meta); loadDoc(s.bytes, s.fields, "Kaufvertrag_" + S.meta.vorgang + ".pdf"); });
@@ -1040,7 +1054,7 @@ async function showFinal(now){
   const dl = $("#summary"); dl.innerHTML = "";
   const add = (k,v,mono) => { const dt=document.createElement("dt"); dt.textContent=k; const dd=document.createElement("dd"); dd.textContent=v; if(mono){dd.style.fontFamily="var(--f-mono)";dd.style.fontSize="13px";} dl.append(dt,dd); };
   add("Vorgang", S.meta.vorgang); add("Kunde", S.meta.kunde); add("Unterschriften", S.fields.filter(isSig).length + " von " + S.fields.filter(isSig).length);
-  add("Original", short(S.origHash), true); add("Final", short(S.finalHash), true);
+  add("Original", short(S.origHash), true); add("Final", short(S.finalHash), true); add("Siegel", "wird erstellt …", true); S.sealed = null;
   $("#mailAddr").value = S.meta.mail || ""; $("#sendMail").textContent = "Senden"; S.sent = false;
   $("#saveMsg").hidden = true; $("#mailMsg").hidden = true; $("#archMsg").hidden = true;
   $("#savePdf").hidden = false;
@@ -1049,11 +1063,11 @@ async function showFinal(now){
 $("#savePdf").addEventListener("click", async () => {
   const m = $("#saveMsg"); m.hidden = false; m.classList.remove("err");
   if (!downloads){
-    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([S.final], {type:"application/pdf"}));
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([S.sealed || S.final], {type:"application/pdf"}));
     a.download = S.fileName.replace(/(_unterschrieben)?\.pdf$/i,"") + "_unterschrieben.pdf"; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000); m.textContent = "PDF gespeichert."; return;
   }
-  try { await downloads.save({ filename: S.fileName.endsWith(".pdf") ? S.fileName.replace(/\.pdf$/,"_unterschrieben.pdf").replace("_unterschrieben_unterschrieben","_unterschrieben") : S.fileName + ".pdf", data: new Blob([S.final], {type:"application/pdf"}) }); m.textContent = "PDF gespeichert."; }
+  try { await downloads.save({ filename: S.fileName.endsWith(".pdf") ? S.fileName.replace(/\.pdf$/,"_unterschrieben.pdf").replace("_unterschrieben_unterschrieben","_unterschrieben") : S.fileName + ".pdf", data: new Blob([S.sealed || S.final], {type:"application/pdf"}) }); m.textContent = "PDF gespeichert."; }
   catch(e){ m.classList.add("err"); m.textContent = e?.code==="declined" ? "Speichern abgebrochen." : "Speichern hat nicht geklappt. Bitte noch einmal versuchen."; }
 });
 /* ---------- Versand (Edge Function send-contract) ---------- */
@@ -1146,7 +1160,7 @@ async function showArchive(){
   document.querySelector(".steps").hidden = true; $("#sA").hidden = false; $("#navArch").setAttribute("aria-current","page");
   $("#archLede").textContent = me.role==="admin" ? "Alle Vorgänge aller Verkäufer." : "Deine Vorgänge.";
   const list = $("#archList"); list.innerHTML = '<p class="empty">Wird geladen …</p>';
-  const { data, error } = await sb.from("deals").select("id,contract_no,vehicle,customer_name,status,created_at,signed_at,final_path,original_path,profiles(full_name,email)").order("created_at", { ascending:false }).limit(500);
+  const { data, error } = await sb.from("deals").select("id,contract_no,vehicle,customer_name,status,created_at,signed_at,final_path,sealed_path,original_path,profiles(full_name,email)").order("created_at", { ascending:false }).limit(500);
   if (error){ list.innerHTML = ""; const p = document.createElement("p"); p.className = "toast err"; p.textContent = "Archiv konnte nicht geladen werden: " + error.message; list.appendChild(p); return; }
   archRows = data; renderArchive(); pushState().catch(() => {});
   window.scrollTo({top:0, behavior:"instant"});
@@ -1164,7 +1178,7 @@ function renderArchive(){
     const s = document.createElement("small"); s.className = "seller"; s.textContent = r.profiles?.full_name || r.profiles?.email || "";
     const pill = document.createElement("span"); pill.className = "pill" + (r.final_path ? " ok" : ""); pill.textContent = STATUS[r.status] || r.status;
     const btn = document.createElement("button"); btn.className = "btn small"; btn.textContent = "PDF";
-    const path = r.final_path || r.original_path; btn.disabled = !path;
+    const path = r.sealed_path || r.final_path || r.original_path; btn.disabled = !path;
     btn.addEventListener("click", async () => {
       const w = window.open("", "_blank");
       const { data, error } = await sb.storage.from("contracts").createSignedUrl(path, 300);

@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
 
     // Zugriff mit den Rechten des Aufrufers prüfen (RLS)
     const { data: deal, error } = await user.from("deals")
-      .select("id,contract_no,vehicle,customer_name,customer_email,status,final_path,final_sha256,signed_at,seller_id")
+      .select("id,contract_no,vehicle,customer_name,customer_email,status,final_path,final_sha256,sealed_path,sealed_sha256,timestamped,signed_at,seller_id")
       .eq("id", deal_id).single();
     if (error || !deal) return json({ error: "Vorgang nicht gefunden" }, 404);
     if (!deal.final_path) return json({ error: "Vertrag ist noch nicht abgeschlossen" }, 409);
@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
     if (!RESEND) {
       results.mail = "nicht eingerichtet (RESEND_API_KEY fehlt)";
     } else {
-      const dl = await admin.storage.from("contracts").download(deal.final_path);
+      const dl = await admin.storage.from("contracts").download(deal.sealed_path ?? deal.final_path);
       if (dl.error) throw dl.error;
       const pdf = b64(new Uint8Array(await dl.data.arrayBuffer()));
       const attachments = [{ filename: fileName, content: pdf }];
