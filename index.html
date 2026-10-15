@@ -108,6 +108,9 @@ p{margin:0}
 @media (prefers-reduced-motion:reduce){.sigfield.tap{animation:none}}
 
 .side{position:sticky;top:calc(env(safe-area-inset-top,0px) + 84px);display:flex;flex-direction:column;gap:16px;min-width:0}
+.side > .panel{max-height:calc(100vh - env(safe-area-inset-top,0px) - 100px);max-height:calc(100dvh - env(safe-area-inset-top,0px) - 100px);overflow:auto;overscroll-behavior:contain}
+.side .list{flex:none}
+#toSign,#finish{position:sticky;bottom:0;flex:none;box-shadow:0 -8px 12px var(--surface)}
 .hash{font-family:var(--f-mono);font-size:13px;word-break:break-all;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-variant-numeric:tabular-nums}
 .list{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
 .list li{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:15px}
@@ -128,6 +131,13 @@ p{margin:0}
 .txtfield .x,.chkfield .x{position:absolute;top:-13px;right:-13px;width:26px;height:26px;border-radius:50%;border:0;background:var(--ink);color:var(--surface);font-size:14px;cursor:pointer;display:grid;place-items:center;z-index:2}
 .step2-only{display:contents}
 .dot.tx{background:#14306E;border-radius:2px}
+.docs{display:flex;flex-direction:column;gap:10px}
+.docrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:8px}
+.docrow .hint{grid-column:1;min-width:0;overflow-wrap:anywhere}
+.docrow .btn{grid-column:2;grid-row:1/span 2}
+.docrow.ok{border-color:var(--ok);background:var(--ok-soft)}
+.docrow.ok .hint{color:var(--ok)}
+.txtfield.opt{border-style:dotted;background:rgba(59,91,169,.04)}
 .btn.on{outline:3px solid var(--red);outline-offset:1px}
 
 /* Abschluss */
@@ -243,8 +253,13 @@ p{margin:0}
           <label class="fld"><span class="label">E-Mail Kunde</span><input id="mMail" type="email" autocomplete="off" placeholder="kunde@beispiel.de"></label>
           <label class="fld" style="grid-column:1/-1"><span class="label">Fahrzeug</span><input id="mFz" autocomplete="off" placeholder="z. B. VW Golf 8 · FIN WVWZZZ…"></label>
         </div>
+        <div class="docs">
+          <div class="docrow" id="kvRow"><span class="label">Kaufvertrag</span><span class="hint" id="kvName">Noch kein PDF gewählt</span><label class="btn small file">PDF wählen<input type="file" id="pdfIn" accept="application/pdf"></label></div>
+          <div class="docrow"><span class="label">Anlagen (optional)</span><span class="hint">z. B. CarVertical, Carfax. Werden ans Vertragsende angehängt und Vertragsbestandteil.</span><label class="btn small file">Anlage hinzufügen<input type="file" id="attIn" accept="application/pdf" multiple></label></div>
+          <ul class="list" id="attList"></ul>
+        </div>
         <div class="actions">
-          <label class="btn primary file">Kaufvertrag (PDF) wählen<input type="file" id="pdfIn" accept="application/pdf"></label>
+          <button class="btn primary" id="startDeal" disabled>Weiter zu den Feldern</button>
           <button class="btn" id="loadSample">Beispiel zum Testen</button>
         </div>
         <p class="toast err" id="loadErr" hidden></p>
@@ -482,14 +497,60 @@ function readFormFields(d){
 }
 const isSig = f => !f.kind || f.kind === "sig";
 
-async function loadDoc(bytes, fields, name){
+/* Unterschriftsstellen und Tabelle der vorvertraglichen Informationen im Kaufvertrag (DMS-Layout) erkennen */
+async function detectFields(bytes, pageCount){
+  const out = []; let pdf;
+  try { pdf = await pdfjsLib.getDocument({ data: bytes.slice() }).promise; } catch { return out; }
+  try {
+    for (let i=1; i<=Math.min(pdf.numPages, pageCount); i++){
+      const page = await pdf.getPage(i);
+      const [x0, y0, x1, y1] = page.view, W = x1-x0, H = y1-y0;
+      if (page.rotate % 360) continue;
+      const items = (await page.getTextContent()).items.filter(it => it.str && it.str.trim())
+        .map(it => ({ s:it.str.trim(), x:it.transform[4]-x0, y:it.transform[5]-y0, w:it.width, h:Math.abs(it.transform[3]) }));
+      const sig = (role, x, yb, w, h) => {
+        x = Math.max(4, Math.min(x, W-w-4));
+        if (out.some(o => o.page===i-1 && Math.abs(o.x*W - x) < 20 && Math.abs((1-o.y)*H - (yb+h)) < 20)) return;
+        out.push({ id:"auto"+out.length, kind:"sig", role, sig:null, page:i-1, x:x/W, y:1-(yb+h)/H, w:w/W, h:h/H });
+      };
+      const sameLine = (a, re) => items.find(b => b!==a && Math.abs(b.y-a.y) < 2 && b.x > a.x && re.test(b.s));
+      for (const it of items){
+        const m = it.s.match(/^(X\s*)?Unterschrift\s+(Käufer|Kunde|Verbraucher|Verkäufer)\s*(:)?\s*_*$/i);
+        const vkAlone = !m && /^Verkäufer$/i.test(it.s) && it.h < 10.5 && sameLine(it, /^Unterschrift\s+Käufer$/i);
+        if (!m && !vkAlone) continue;
+        const role = vkAlone || /Verkäufer/i.test(m[2]) ? "vk" : "kd";
+        const xMark = sameLine(it, /^X$/);
+        if (xMark) sig(role, xMark.x + 8, it.y - 32, 200, 44);              // Tabellenzeile: rechts neben dem X
+        else if (m && m[3]) sig(role, it.x + it.w + 6, it.y - 4, 180, 44);  // „Unterschrift Kunde: ____“
+        else if (m && m[1]) sig(role, it.x - 40, it.y + 12, 260, 45);       // „X Unterschrift Kunde“ unter langer Linie
+        else sig(role, it.x, it.y + 12, Math.max(165, it.w + 90), 45);     // Bezeichnung unter der Linie
+      }
+      const hd = items.find(it => /^Merkmal der Kaufsache/i.test(it.s)), hd2 = items.find(it => /^Tatsächliche Beschaffenheit/i.test(it.s));
+      if (hd && hd2){
+        for (let r=0; r<5; r++){
+          const yb = hd.y - 34 - 26.1*r;
+          [[hd.x, hd2.x - hd.x - 10, "Merkmal"], [hd2.x, Math.min(192, W - 50 - hd2.x), "Beschaffenheit"]].forEach(([x,w,lab]) =>
+            out.push({ id:"auto"+out.length, kind:"text", role:"vk", value:"", label:lab + " " + (r+1), optional:true, minW:w/W, maxW:w/W, page:i-1, x:x/W, y:1-(yb+15)/H, w:w/W, h:15/H }));
+        }
+      }
+    }
+  } finally { pdf.destroy(); }
+  return out;
+}
+
+async function loadDoc(bytes, fields, name, opt={}){
   const err = $("#loadErr"); err.hidden = true;
+  S.formCount = 0; S.autoCount = { sig:0, text:0 };
   try {
     const d = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption:true });
     S.pageSizes = d.getPages().map(p => p.getSize());
-    S.formCount = 0;
-    if (!fields.length){ fields = readFormFields(d); S.formCount = fields.length; }
-  } catch(e) { err.textContent = "Das PDF ließ sich nicht öffnen. Es ist vermutlich passwortgeschützt oder beschädigt. Bitte ein anderes wählen."; err.hidden = false; return; }
+    if (!fields.length){
+      fields = readFormFields(d); S.formCount = fields.length;
+      const auto = await detectFields(opt.kvBytes || bytes, opt.kvPages || S.pageSizes.length);
+      fields = fields.concat(auto);
+      S.autoCount = { sig:auto.filter(isSig).length, text:auto.filter(f => f.kind==="text").length };
+    }
+  } catch(e) { console.error(e); err.textContent = "Das PDF ließ sich nicht öffnen. Es ist vermutlich passwortgeschützt oder beschädigt. Bitte ein anderes wählen."; err.hidden = false; return; }
   S.orig = bytes; S.fileName = name; S.fields = fields; S.locked = false; S.final = null; S.maxStep = 2;
   S.origHash = await sha256(bytes);
   S.dealId = null;
@@ -497,8 +558,12 @@ async function loadDoc(bytes, fields, name){
   catch(e) { console.error(e); err.textContent = "Vorgang konnte nicht im Archiv angelegt werden: " + (e.message||e) + ". Bitte Internetverbindung prüfen."; err.hidden = false; S.orig = null; return; }
   $("#origHash").textContent = S.origHash.toUpperCase().match(/.{1,8}/g).join(" ");
   go(2);
-  const fi = $("#formInfo"); fi.hidden = !S.formCount;
-  if (S.formCount) fi.textContent = S.formCount + " Formularfelder aus dem PDF übernommen. Bitte prüfen und ausfüllen.";
+  const fi = $("#formInfo"), info = [];
+  if (S.autoCount.sig) info.push(S.autoCount.sig + " Unterschriftsfelder");
+  if (S.autoCount.text) info.push(S.autoCount.text + " Felder für die vorvertraglichen Informationen");
+  if (S.formCount) info.push(S.formCount + " Formularfelder aus dem PDF");
+  fi.hidden = !info.length;
+  if (info.length) fi.textContent = info.join(", ").replace(/, ([^,]*)$/, " und $1") + " automatisch gesetzt. Bitte prüfen, fehlende Felder ergänzen.";
   await renderDoc(bytes, $("#viewer"), true);
   drawFields();
 }
@@ -520,9 +585,9 @@ async function createDeal(bytes){
   if (up.error) throw up.error;
   const u = await sb.from("deals").update({ original_path:path }).eq("id", S.dealId);
   if (u.error) throw u.error;
-  await audit("created", { file:S.fileName, sha256:S.origHash, pages });
+  await audit("created", { file:S.fileName, sha256:S.origHash, pages, parts:S.parts || null });
 }
-const fieldGeo = () => S.fields.map(({id,kind,role,page,x,y,w,h,value,formName}) => ({id,kind:kind||"sig",role,page,x,y,w,h,value,formName}));
+const fieldGeo = () => S.fields.map(({id,kind,role,page,x,y,w,h,value,formName,label}) => ({id,kind:kind||"sig",role,page,x,y,w,h,value,formName,label}));
 async function recordSignature(f){
   if (!S.dealId) return;
   if (!S.dbLocked){
@@ -549,11 +614,63 @@ async function archiveFinal(){
   } catch(e) { console.error(e); m.classList.add("err"); m.textContent = "Archivierung fehlgeschlagen: " + (e.message||e) + ". Bitte PDF zusätzlich speichern."; }
 }
 
-$("#loadSample").addEventListener("click", async () => { readMeta(); const s = await makeSample(S.meta); loadDoc(s.bytes, s.fields, "Kaufvertrag_" + S.meta.vorgang + ".pdf"); });
+$("#loadSample").addEventListener("click", async () => { readMeta(); S.parts = null; const s = await makeSample(S.meta); loadDoc(s.bytes, s.fields, "Kaufvertrag_" + S.meta.vorgang + ".pdf"); });
+/* Kaufvertrag + Anlagen wählen, dann zu einem Dokument zusammenfügen */
+S.kv = null; S.atts = [];
+async function readPdf(file){
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const d = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption:true });
+  return { name:file.name, bytes, pages:d.getPageCount(), size:bytes.length };
+}
+const pdfErr = n => "„" + n + "“ ließ sich nicht öffnen. Es ist vermutlich passwortgeschützt oder beschädigt.";
+function showDocs(){
+  $("#kvRow").classList.toggle("ok", !!S.kv);
+  $("#kvName").textContent = S.kv ? "✓ " + S.kv.name + " · " + S.kv.pages + " Seiten" : "Noch kein PDF gewählt";
+  const ul = $("#attList"); ul.innerHTML = "";
+  S.atts.forEach((a,i) => {
+    const li = document.createElement("li");
+    const dot = document.createElement("span"); dot.className = "dot tx";
+    const tx = document.createElement("span"); tx.textContent = "Anlage " + (i+1) + ": " + a.name + " · " + a.pages + " S."; tx.style.minWidth = "0"; tx.style.overflowWrap = "anywhere";
+    const x = document.createElement("button"); x.className = "btn small"; x.textContent = "Entfernen";
+    x.addEventListener("click", () => { S.atts.splice(i,1); showDocs(); });
+    li.append(dot, tx, x); ul.appendChild(li);
+  });
+  $("#startDeal").disabled = !S.kv;
+}
 $("#pdfIn").addEventListener("change", async e => {
-  const file = e.target.files[0]; if (!file) return; readMeta();
-  const buf = new Uint8Array(await file.arrayBuffer()); e.target.value = "";
-  loadDoc(buf, [], file.name.replace(/\.pdf$/i,"") + "_unterschrieben.pdf");
+  const file = e.target.files[0]; e.target.value = ""; if (!file) return;
+  const err = $("#loadErr"); err.hidden = true;
+  try { S.kv = await readPdf(file); } catch { err.textContent = pdfErr(file.name); err.hidden = false; }
+  showDocs();
+});
+$("#attIn").addEventListener("change", async e => {
+  const files = [...e.target.files]; e.target.value = "";
+  const err = $("#loadErr"); err.hidden = true;
+  for (const f of files){ try { S.atts.push(await readPdf(f)); } catch { err.textContent = pdfErr(f.name); err.hidden = false; } }
+  showDocs();
+});
+$("#startDeal").addEventListener("click", async () => {
+  readMeta();
+  const err = $("#loadErr"); err.hidden = true;
+  if (!$("#mKd").value.trim()){ err.textContent = "Bitte den Namen des Kunden eintragen."; err.hidden = false; $("#mKd").focus(); return; }
+  const b = $("#startDeal"); b.disabled = true; b.textContent = "Wird vorbereitet …";
+  try {
+    const parts = [S.kv, ...S.atts];
+    let bytes = S.kv.bytes;
+    if (S.atts.length){
+      const out = await PDFLib.PDFDocument.create();
+      for (const p of parts){
+        const src = await PDFLib.PDFDocument.load(p.bytes, { ignoreEncryption:true });
+        (await out.copyPages(src, src.getPageIndices())).forEach(pg => out.addPage(pg));
+      }
+      out.setTitle("Kaufvertrag " + S.meta.vorgang); bytes = await out.save();
+    }
+    let from = 1;
+    S.parts = [];
+    for (const [i,p] of parts.entries()){ S.parts.push({ kind: i ? "Anlage " + i : "Kaufvertrag", name:p.name, from, to:from+p.pages-1, sha256: await sha256(p.bytes) }); from += p.pages; }
+    await loadDoc(bytes, [], S.kv.name.replace(/\.pdf$/i,"") + "_unterschrieben.pdf", { kvPages:S.kv.pages, kvBytes:S.kv.bytes });
+  } catch(e){ console.error(e); err.textContent = "Zusammenfügen hat nicht geklappt: " + (e.message||e); err.hidden = false; }
+  finally { b.disabled = !S.kv; b.textContent = "Weiter zu den Feldern"; }
 });
 
 /* ---------- PDF anzeigen (seitenweise, nur sichtbare Seiten im Speicher) ---------- */
@@ -626,7 +743,7 @@ function placeAt(e, wrap){
   if (k==="text") wrap.querySelector('[data-fid="'+f.id+'"] input')?.focus();
 }
 const measure = document.createElement("canvas");
-const fieldName = f => isSig(f) ? ROLE[f.role] + ": " + nameFor(f.role) : f.kind==="check" ? (f.formName ? f.label : "Kreuz") + (f.value ? " ☒" : " ☐") : (f.value ? "„" + f.value + "“" : (f.formName ? f.label : "Textfeld") + " (leer)");
+const fieldName = f => isSig(f) ? ROLE[f.role] + ": " + nameFor(f.role) : f.kind==="check" ? (f.formName ? f.label : "Kreuz") + (f.value ? " ☒" : " ☐") : (f.value ? (f.optional ? f.label + ": " : "") + "„" + f.value + "“" : (f.label || "Textfeld") + " (leer)");
 function removeBtn(f){
   const x = document.createElement("button"); x.className = "x"; x.textContent = "×"; x.setAttribute("aria-label","Feld entfernen");
   x.addEventListener("click", ev => { ev.stopPropagation(); S.fields = S.fields.filter(g => g!==f); drawFields(); updateLists(); });
@@ -645,16 +762,16 @@ function drawFields(){
         d.className = "chkfield"; d.textContent = f.value ? "✕" : "";
         if (S.step===2){ d.title = "Tippen zum Umschalten"; d.addEventListener("click", ev => { ev.stopPropagation(); f.value = !f.value; drawFields(); updateLists(); }); d.appendChild(removeBtn(f)); }
       } else {
-        d.className = "txtfield" + (!f.value && S.step===2 ? " empty" : "");
+        d.className = "txtfield" + (f.optional ? " opt" : "") + (!f.value && !f.optional && S.step===2 ? " empty" : "");
         if (S.step===2){
           const inp = document.createElement("input"); inp.value = f.value || ""; inp.setAttribute("aria-label", f.label || "Textfeld");
           inp.addEventListener("click", ev => ev.stopPropagation());
           inp.addEventListener("input", () => {
-            f.value = inp.value; d.classList.toggle("empty", !f.value);
+            f.value = inp.value; d.classList.toggle("empty", !f.value && !f.optional);
             if (!f.formName){ // eigenes Textfeld wächst mit dem Text bis zum Seitenrand
               const m = measure.getContext("2d"); m.font = px + "px Helvetica, Arial, sans-serif";
               const need = (m.measureText(f.value).width + 12) / wrap.clientWidth;
-              f.w = Math.min(Math.max(f.minW || f.w, need), 1 - f.x); d.style.width = f.w*100 + "%";
+              f.w = Math.min(Math.max(f.minW || f.w, need), f.maxW || 1 - f.x, 1 - f.x); d.style.width = f.w*100 + "%";
             }
             if (f.formName) S.fields.forEach(g => { if (g!==f && g.formName===f.formName && g.kind==="text"){ g.value = f.value; const o = document.querySelector('[data-fid="'+g.id+'"] input'); if (o) o.value = f.value; } });
           });
@@ -689,7 +806,7 @@ function updateLists(){
   };
   const fl = $("#fieldList"); fl.innerHTML = "";
   if (!S.fields.length){ const e = document.createElement("li"); e.className="empty"; e.style.display="block"; e.textContent = "Noch keine Felder. Mindestens eine Käufer-Unterschrift setzen."; fl.appendChild(e); }
-  S.fields.forEach(f => fl.appendChild(mk(f,false)));
+  S.fields.filter(f => !(f.optional && !f.value)).forEach(f => fl.appendChild(mk(f,false)));
   $("#toSign").disabled = !S.fields.some(f => isSig(f) && f.role==="kd");
   const sigs = S.fields.filter(isSig);
   const sl = $("#signList"); sl.innerHTML = ""; sigs.forEach(f => sl.appendChild(mk(f,true)));
@@ -699,7 +816,7 @@ function updateLists(){
 }
 $("#toSign").addEventListener("click", () => {
   document.activeElement?.blur?.();
-  const empty = S.fields.filter(f => f.kind==="text" && !String(f.value||"").trim());
+  const empty = S.fields.filter(f => f.kind==="text" && !f.optional && !String(f.value||"").trim());
   if (empty.length && !confirm(empty.length + (empty.length===1 ? " Textfeld ist" : " Textfelder sind") + " noch leer. Ab der ersten Unterschrift lässt sich nichts mehr ändern. Trotzdem weiter?")) { jumpTo(empty[0]); return; }
   S.maxStep = 3; go(3);
 });
@@ -719,7 +836,7 @@ cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end)
 function padState(){
   const pts = strokes.reduce((a,s)=>a+s.length,0);
   $("#padMeta").textContent = strokes.length ? strokes.length + " Striche · " + pts + " Messpunkte" : "Noch keine Striche";
-  $("#padOk").disabled = !strokes.length || (active?.role==="kd" && !$("#consent").checked);
+  $("#padOk").disabled = !strokes.length || (!$("#consentRow").hidden && !$("#consent").checked);
 }
 $("#consent").addEventListener("change", padState);
 $("#padClear").addEventListener("click", () => { strokes = []; redraw(); padState(); });
@@ -731,7 +848,8 @@ function openPad(f){
   const n = nameFor(f.role);
   $("#padTitle").textContent = "Unterschrift " + ROLE[f.role];
   $("#padSub").textContent = n + " · Vorgang " + S.meta.vorgang + " · Fingerabdruck " + short(S.origHash);
-  $("#consentRow").hidden = f.role!=="kd"; $("#consent").checked = false;
+  const firstKd = !S.fields.some(g => isSig(g) && g.role==="kd" && g.sig);
+  $("#consentRow").hidden = !(f.role==="kd" && firstKd); $("#consent").checked = false;
   $("#consentText").textContent = "Ich, " + n + ", habe den Kaufvertrag gelesen und unterschreibe ihn elektronisch. Das Dokument mit dem angezeigten Fingerabdruck ist das, was ich unterschreibe.";
   $("#pad").hidden = false; document.body.style.overflow = "hidden";
   requestAnimationFrame(sizePad); padState();
@@ -752,9 +870,10 @@ $("#padOk").addEventListener("click", async () => {
     url, signedAt:new Date(), name:nameFor(active.role), strokes:strokes.length, points:allP.length,
     durationMs: allP.length ? allP[allP.length-1].t - allP[0].t : 0,
     pressure: allP.some(p => p.p!==0.5 && p.p!==0), input: allP.some(p=>p.k==="p") ? "Stift" : allP.some(p=>p.k==="t") ? "Finger" : "Maus",
-    bioHash: await sha256(new TextEncoder().encode(bio)), consent: active.role==="kd",
+    bioHash: await sha256(new TextEncoder().encode(bio)), consent: !$("#consentRow").hidden,
   };
   S.locked = true; closePad(); go(3);
+  const next = S.fields.find(g => isSig(g) && !g.sig); if (next) setTimeout(() => jumpTo(next), 50);
   try { await recordSignature(active_f); }
   catch(e) { console.error(e); alert("Die Unterschrift ist im Dokument, konnte aber nicht im Archiv protokolliert werden: " + (e.message||e)); }
 });
@@ -827,6 +946,7 @@ $("#finish").addEventListener("click", async () => {
   sect("Dokument");
   row("Datei", S.fileName); row("Vorgang", S.meta.vorgang); row("Vorgangs-ID", S.dealId || "–", true); row("Seiten (ohne Protokoll)", String(pages.length));
   row("Original SHA-256", S.origHash, true);
+  (S.parts || []).forEach(pt => { row(pt.kind + " · S. " + pt.from + "–" + pt.to, pt.name); row("SHA-256 " + pt.kind, pt.sha256, true); });
   row("Verkäufer (angemeldet)", S.meta.verkaeufer + " <" + me.email + ">"); row("Abgeschlossen", fmtDT(now) + " (" + Intl.DateTimeFormat().resolvedOptions().timeZone + ")");
   for (const fl of S.fields.filter(isSig)){
     sect("Unterschrift " + ROLE[fl.role]);
@@ -836,10 +956,10 @@ $("#finish").addEventListener("click", async () => {
     row("Biometrie SHA-256", s.bioHash, true);
     if (s.consent) row("Erklärung", "Bestätigt: Vertrag gelesen, elektronische Unterzeichnung des Dokuments mit obigem Fingerabdruck.");
   }
-  const filled = S.fields.filter(g => !isSig(g));
+  const filled = S.fields.filter(g => !isSig(g) && !(g.optional && !g.value));
   if (filled.length){
     sect("Ausgefüllte Felder (vor der ersten Unterschrift festgeschrieben)");
-    filled.forEach(g => row((g.formName ? g.label : (g.kind==="check" ? "Kreuz" : "Textfeld")) + " · S. " + (g.page+1), g.kind==="check" ? (g.value ? "angekreuzt" : "nicht angekreuzt") : (g.value || "(leer)")));
+    filled.forEach(g => row((g.formName || g.optional ? g.label : (g.kind==="check" ? "Kreuz" : "Textfeld")) + " · S. " + (g.page+1), g.kind==="check" ? (g.value ? "angekreuzt" : "nicht angekreuzt") : (g.value || "(leer)")));
   }
   sect("Gerät");
   row("Browser / System", navigator.userAgent);
@@ -882,7 +1002,7 @@ $("#savePdf").addEventListener("click", async () => {
   catch(e){ m.classList.add("err"); m.textContent = e?.code==="declined" ? "Speichern abgebrochen." : "Speichern hat nicht geklappt. Bitte noch einmal versuchen."; }
 });
 $("#sendMail").addEventListener("click", () => { $("#mailMsg").hidden = false; });
-function resetDeal(){ views.forEach(v => { v.io.disconnect(); v.pdf.destroy(); }); views.clear(); S.orig=null; S.fields=[]; S.locked=false; S.dbLocked=false; S.dealId=null; S.final=null; S.maxStep=1; $("#viewer").innerHTML=""; $("#finalViewer").innerHTML=""; ["#mNr","#mKd","#mMail","#mFz"].forEach(q => $(q).value = ""); }
+function resetDeal(){ views.forEach(v => { v.io.disconnect(); v.pdf.destroy(); }); views.clear(); S.orig=null; S.fields=[]; S.locked=false; S.dbLocked=false; S.dealId=null; S.final=null; S.maxStep=1; $("#viewer").innerHTML=""; $("#finalViewer").innerHTML=""; ["#mNr","#mKd","#mMail","#mFz"].forEach(q => $(q).value = ""); S.kv = null; S.atts = []; S.parts = null; showDocs(); }
 $("#restart").addEventListener("click", () => { resetDeal(); go(1); });
 
 /* ---------- Anmeldung ---------- */
