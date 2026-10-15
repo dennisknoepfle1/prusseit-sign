@@ -95,7 +95,7 @@ p{margin:0}
 .work{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;margin-top:20px;align-items:start}
 .viewer{display:flex;flex-direction:column;gap:18px;min-width:0}
 .page{position:relative;width:100%;background:var(--paper);box-shadow:0 1px 2px rgba(0,0,0,.08),0 8px 24px rgba(0,0,0,.08);border-radius:2px;overflow:hidden}
-.page canvas{display:block;width:100%;height:100%}
+.page canvas{position:absolute;inset:0;display:block;width:100%;height:100%}
 .page.placing{cursor:crosshair;outline:3px dashed var(--red);outline-offset:4px}
 .pageno{position:absolute;top:8px;right:8px;font-family:var(--f-mono);font-size:11px;background:rgba(14,12,13,.75);color:#fff;padding:2px 6px;border-radius:4px}
 .sigfield{position:absolute;border:2px dashed var(--red);background:rgba(227,0,27,.07);border-radius:4px;display:flex;align-items:flex-end;justify-content:flex-start;color:#B30016;font-size:12px;font-weight:600;padding:3px 6px;cursor:default}
@@ -117,8 +117,17 @@ p{margin:0}
 .pill.ok{background:var(--ok-soft);color:var(--ok)}
 .hint{font-size:14px;color:var(--muted)}
 .empty{font-size:14px;color:var(--muted);padding:12px;border:1px dashed var(--line);border-radius:8px;text-align:center}
-.toggle{display:flex;gap:8px}
-.toggle .btn{flex:1}
+.toggle{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.toggle .btn{min-width:0}
+.txtfield,.chkfield{position:absolute;border:1.5px dashed #3B5BA9;background:rgba(59,91,169,.08);border-radius:3px;display:flex;align-items:center;color:#14306E;font-family:Helvetica,Arial,sans-serif;line-height:1;overflow:visible}
+.txtfield input{width:100%;height:100%;border:0;background:transparent;padding:0 3px;font:inherit;color:inherit;outline:none;min-width:0}
+.txtfield input:focus{background:rgba(59,91,169,.14)}
+.txtfield span{padding:0 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.txtfield.empty{border-color:var(--red);background:rgba(227,0,27,.07)}
+.chkfield{justify-content:center;font-weight:700;cursor:pointer}
+.txtfield .x,.chkfield .x{position:absolute;top:-13px;right:-13px;width:26px;height:26px;border-radius:50%;border:0;background:var(--ink);color:var(--surface);font-size:14px;cursor:pointer;display:grid;place-items:center;z-index:2}
+.step2-only{display:contents}
+.dot.tx{background:#14306E;border-radius:2px}
 .btn.on{outline:3px solid var(--red);outline-offset:1px}
 
 /* Abschluss */
@@ -255,16 +264,19 @@ p{margin:0}
 
   <!-- 2 + 3 Arbeitsfläche -->
   <section id="s2" hidden>
-    <h1 id="workTitle">Unterschriftsfelder setzen</h1>
+    <h1 id="workTitle">Felder setzen und ausfüllen</h1>
     <div class="work">
       <div class="viewer" id="viewer"></div>
       <aside class="side">
         <div class="panel" id="editPanel">
           <h3>Feld hinzufügen</h3>
-          <p class="hint" id="placeHint">Rolle wählen, dann auf die Stelle im Dokument tippen.</p>
+          <p class="toast" id="formInfo" hidden></p>
+          <p class="hint" id="placeHint">Feldart wählen, dann auf die Stelle im Dokument tippen.</p>
           <div class="toggle">
-            <button class="btn small" id="addKd"><span class="dot"></span>Käufer</button>
-            <button class="btn small" id="addVk"><span class="dot vk"></span>Verkäufer</button>
+            <button class="btn small" id="addKd"><span class="dot"></span>Unterschrift Käufer</button>
+            <button class="btn small" id="addVk"><span class="dot vk"></span>Unterschrift Verkäufer</button>
+            <button class="btn small" id="addTx"><span class="dot tx"></span>Textfeld</button>
+            <button class="btn small" id="addCk"><span class="dot tx"></span>Kreuz</button>
           </div>
           <ul class="list" id="fieldList"></ul>
           <button class="btn primary block" id="toSign">Weiter zur Unterschrift</button>
@@ -374,7 +386,7 @@ function go(n){
     b.disabled = !ok || i===n;
   }
   if (n===2||n===3){
-    $("#workTitle").textContent = n===2 ? "Unterschriftsfelder setzen" : "Bitte unterschreiben";
+    $("#workTitle").textContent = n===2 ? "Felder setzen und ausfüllen" : "Bitte unterschreiben";
     $("#editPanel").hidden = n!==2; $("#signPanel").hidden = n!==3;
     setPlacing(null); drawFields(); updateLists();
   }
@@ -435,11 +447,48 @@ function readMeta(){
   S.meta = { verkaeufer:$("#mVk").value.trim()||"Verkäufer", vorgang:$("#mNr").value.trim()||"ohne Nummer",
              kunde:$("#mKd").value.trim()||"Kunde", mail:$("#mMail").value.trim(), fahrzeug:$("#mFz").value.trim() };
 }
+/* Formularfelder (AcroForm) des PDFs als Felder übernehmen */
+function readFormFields(d){
+  const out = [];
+  let form; try { form = d.getForm(); } catch { return out; }
+  const pages = d.getPages();
+  const pageOf = widget => {
+    const ref = d.context.getObjectRef(widget.dict);
+    const pRef = widget.P();
+    let i = pRef ? pages.findIndex(pg => pg.ref === pRef || pg.ref.toString() === pRef.toString()) : -1;
+    if (i < 0 && ref) i = pages.findIndex(pg => { const a = pg.node.Annots(); return a && a.asArray().some(x => x === ref || x.toString() === ref.toString()); });
+    return i;
+  };
+  const roleOf = n => /verk(ä|ae)uf|h(ä|ae)ndler|seller|dealer|vk/i.test(n) ? "vk" : "kd";
+  let n = 0;
+  for (const fld of form.getFields()){
+    const isTx = fld instanceof PDFLib.PDFTextField, isCk = fld instanceof PDFLib.PDFCheckBox, isSig = fld instanceof PDFLib.PDFSignature;
+    if (!isTx && !isCk && !isSig) continue;
+    if (fld.isReadOnly && fld.isReadOnly()) continue;
+    const name = fld.getName();
+    const widgets = fld.acroField.getWidgets();
+    (isCk ? widgets.slice(0,1) : widgets).forEach(w => {
+      const pi = pageOf(w); if (pi < 0) return;
+      const r = w.getRectangle(), ps = pages[pi].getSize();
+      if (!r.width || !r.height) return;
+      const f = { id:"af" + (n++), page:pi, x:r.x/ps.width, y:1-(r.y+r.height)/ps.height, w:r.width/ps.width, h:r.height/ps.height, formName:name, label:name };
+      if (isTx){ f.kind = "text"; f.role = "vk"; let v = ""; try { v = fld.getText() || ""; } catch {} f.value = v; }
+      else if (isCk){ f.kind = "check"; f.role = "vk"; let v = false; try { v = fld.isChecked(); } catch {} f.value = v; }
+      else { f.kind = "sig"; f.role = roleOf(name); f.sig = null; if (f.h < 0.03){ f.y -= 0.03 - f.h; f.h = 0.03; } }
+      out.push(f);
+    });
+  }
+  return out;
+}
+const isSig = f => !f.kind || f.kind === "sig";
+
 async function loadDoc(bytes, fields, name){
   const err = $("#loadErr"); err.hidden = true;
   try {
-    const d = await PDFLib.PDFDocument.load(bytes);
+    const d = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption:true });
     S.pageSizes = d.getPages().map(p => p.getSize());
+    S.formCount = 0;
+    if (!fields.length){ fields = readFormFields(d); S.formCount = fields.length; }
   } catch(e) { err.textContent = "Das PDF ließ sich nicht öffnen. Es ist vermutlich passwortgeschützt oder beschädigt. Bitte ein anderes wählen."; err.hidden = false; return; }
   S.orig = bytes; S.fileName = name; S.fields = fields; S.locked = false; S.final = null; S.maxStep = 2;
   S.origHash = await sha256(bytes);
@@ -448,6 +497,8 @@ async function loadDoc(bytes, fields, name){
   catch(e) { console.error(e); err.textContent = "Vorgang konnte nicht im Archiv angelegt werden: " + (e.message||e) + ". Bitte Internetverbindung prüfen."; err.hidden = false; S.orig = null; return; }
   $("#origHash").textContent = S.origHash.toUpperCase().match(/.{1,8}/g).join(" ");
   go(2);
+  const fi = $("#formInfo"); fi.hidden = !S.formCount;
+  if (S.formCount) fi.textContent = S.formCount + " Formularfelder aus dem PDF übernommen. Bitte prüfen und ausfüllen.";
   await renderDoc(bytes, $("#viewer"), true);
   drawFields();
 }
@@ -471,7 +522,7 @@ async function createDeal(bytes){
   if (u.error) throw u.error;
   await audit("created", { file:S.fileName, sha256:S.origHash, pages });
 }
-const fieldGeo = () => S.fields.map(({id,role,page,x,y,w,h}) => ({id,role,page,x,y,w,h}));
+const fieldGeo = () => S.fields.map(({id,kind,role,page,x,y,w,h,value,formName}) => ({id,kind:kind||"sig",role,page,x,y,w,h,value,formName}));
 async function recordSignature(f){
   if (!S.dealId) return;
   if (!S.dbLocked){
@@ -493,7 +544,7 @@ async function archiveFinal(){
     if (up.error) throw up.error;
     const { error } = await sb.from("deals").update({ final_path:path, final_sha256:S.finalHash, status:"signed", signed_at:new Date().toISOString() }).eq("id", S.dealId);
     if (error) throw error;
-    await audit("completed", { final_sha256:S.finalHash, pages:S.pageSizes.length + 1 });
+    await audit("completed", { final_sha256:S.finalHash, pages:S.pageSizes.length + (S.protoPages||1) });
     m.textContent = "Im Archiv gespeichert.";
   } catch(e) { console.error(e); m.classList.add("err"); m.textContent = "Archivierung fehlgeschlagen: " + (e.message||e) + ". Bitte PDF zusätzlich speichern."; }
 }
@@ -505,84 +556,153 @@ $("#pdfIn").addEventListener("change", async e => {
   loadDoc(buf, [], file.name.replace(/\.pdf$/i,"") + "_unterschrieben.pdf");
 });
 
-/* ---------- PDF anzeigen ---------- */
+/* ---------- PDF anzeigen (seitenweise, nur sichtbare Seiten im Speicher) ---------- */
+const views = new Map();
 async function renderDoc(bytes, host, interactive){
+  const old = views.get(host); if (old){ old.io.disconnect(); old.pdf.destroy(); }
   host.innerHTML = "";
   const pdf = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
   const width = host.clientWidth || 700;
+  const paint = async wrap => {
+    if (wrap._c || wrap._busy) return; wrap._busy = true;
+    try {
+      const page = await pdf.getPage(+wrap.dataset.page + 1);
+      const v1 = page.getViewport({scale:1});
+      const vp = page.getViewport({scale: Math.min((width/v1.width)*dpr, 1600/v1.width)});
+      const c = document.createElement("canvas"); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+      // Im Editor Formularfelder nicht mitzeichnen, sie liegen als eigene Eingabefelder darüber
+      wrap._task = page.render({canvasContext:c.getContext("2d"), viewport:vp, annotationMode: interactive ? pdfjsLib.AnnotationMode.ENABLE_FORMS : pdfjsLib.AnnotationMode.ENABLE});
+      await wrap._task.promise;
+      if (wrap._want){ wrap.prepend(c); wrap._c = c; } else { c.width = c.height = 0; }
+    } catch(e){ if (e?.name !== "RenderingCancelledException") console.error(e); }
+    finally { wrap._busy = false; wrap._task = null; if (wrap._want && !wrap._c) paint(wrap); }
+  };
+  const unpaint = wrap => {
+    if (wrap._task) wrap._task.cancel();
+    if (wrap._c){ wrap._c.width = wrap._c.height = 0; wrap._c.remove(); wrap._c = null; }
+  };
+  const io = new IntersectionObserver(es => es.forEach(en => {
+    en.target._want = en.isIntersecting;
+    if (en.isIntersecting) paint(en.target); else unpaint(en.target);
+  }), { rootMargin:"1500px 0px" });
+  views.set(host, { pdf, io });
   for (let i=1; i<=pdf.numPages; i++){
     const page = await pdf.getPage(i);
     const v1 = page.getViewport({scale:1});
-    const vp = page.getViewport({scale:(width/v1.width)*dpr});
     const wrap = document.createElement("div");
     wrap.className = "page"; wrap.dataset.page = i-1; wrap.style.aspectRatio = v1.width + "/" + v1.height;
-    const c = document.createElement("canvas"); c.width = vp.width; c.height = vp.height;
     const no = document.createElement("span"); no.className = "pageno"; no.textContent = i + " / " + pdf.numPages;
-    wrap.append(c, no); host.appendChild(wrap);
-    await page.render({canvasContext:c.getContext("2d"), viewport:vp}).promise;
+    wrap.append(no); host.appendChild(wrap); io.observe(wrap);
     if (interactive) wrap.addEventListener("click", e => placeAt(e, wrap));
   }
 }
 
 /* ---------- Felder ---------- */
-function setPlacing(role){
-  S.placing = role;
-  $("#addKd").classList.toggle("on", role==="kd"); $("#addVk").classList.toggle("on", role==="vk");
-  document.querySelectorAll("#viewer .page").forEach(p => p.classList.toggle("placing", !!role));
-  $("#placeHint").textContent = role ? "Jetzt auf die Stelle tippen, an der " + ROLE[role] + " unterschreiben soll." : "Rolle wählen, dann auf die Stelle im Dokument tippen.";
+const PLACE = { kd:"#addKd", vk:"#addVk", text:"#addTx", check:"#addCk" };
+const PLACE_HINT = { kd:"Jetzt auf die Stelle tippen, an der der Käufer unterschreiben soll.", vk:"Jetzt auf die Stelle tippen, an der der Verkäufer unterschreiben soll.",
+  text:"Jetzt auf die Stelle tippen, an der der Text stehen soll.", check:"Jetzt auf das Kästchen tippen, das angekreuzt werden soll." };
+function setPlacing(kind){
+  S.placing = kind;
+  Object.entries(PLACE).forEach(([k,q]) => $(q).classList.toggle("on", kind===k));
+  document.querySelectorAll("#viewer .page").forEach(p => p.classList.toggle("placing", !!kind));
+  $("#placeHint").textContent = kind ? PLACE_HINT[kind] : "Feldart wählen, dann auf die Stelle im Dokument tippen.";
 }
-$("#addKd").addEventListener("click", () => setPlacing(S.placing==="kd"?null:"kd"));
-$("#addVk").addEventListener("click", () => setPlacing(S.placing==="vk"?null:"vk"));
+Object.entries(PLACE).forEach(([k,q]) => $(q).addEventListener("click", () => setPlacing(S.placing===k ? null : k)));
 function placeAt(e, wrap){
-  if (S.step!==2 || !S.placing || e.target.closest(".sigfield")) return;
-  const r = wrap.getBoundingClientRect(), pi = +wrap.dataset.page, ps = S.pageSizes[pi];
-  const w = 0.36, h = (w*ps.width/3)/ps.height;
-  let x = (e.clientX-r.left)/r.width - w/2, y = (e.clientY-r.top)/r.height - h/2;
+  if (S.step!==2 || !S.placing || e.target.closest(".sigfield,.txtfield,.chkfield")) return;
+  const r = wrap.getBoundingClientRect(), pi = +wrap.dataset.page, ps = S.pageSizes[pi], k = S.placing;
+  let w, h;
+  if (k==="text"){ w = 200/ps.width; h = 16/ps.height; }
+  else if (k==="check"){ w = 12/ps.width; h = 12/ps.height; }
+  else { w = 0.36; h = (w*ps.width/3)/ps.height; }
+  let x = (e.clientX-r.left)/r.width - (k==="text" ? 0 : w/2), y = (e.clientY-r.top)/r.height - h/2;
   x = Math.min(Math.max(x,0),1-w); y = Math.min(Math.max(y,0),1-h);
-  S.fields.push({id:"f"+Date.now(), role:S.placing, page:pi, x, y, w, h, sig:null});
+  const f = { id:"f"+Date.now(), page:pi, x, y, w, h };
+  if (k==="text") Object.assign(f, { kind:"text", role:"vk", value:"", label:"Textfeld", minW:w });
+  else if (k==="check") Object.assign(f, { kind:"check", role:"vk", value:true, label:"Kreuz" });
+  else Object.assign(f, { kind:"sig", role:k, sig:null });
+  S.fields.push(f);
   setPlacing(null); drawFields(); updateLists();
+  if (k==="text") wrap.querySelector('[data-fid="'+f.id+'"] input')?.focus();
+}
+const measure = document.createElement("canvas");
+const fieldName = f => isSig(f) ? ROLE[f.role] + ": " + nameFor(f.role) : f.kind==="check" ? (f.formName ? f.label : "Kreuz") + (f.value ? " ☒" : " ☐") : (f.value ? "„" + f.value + "“" : (f.formName ? f.label : "Textfeld") + " (leer)");
+function removeBtn(f){
+  const x = document.createElement("button"); x.className = "x"; x.textContent = "×"; x.setAttribute("aria-label","Feld entfernen");
+  x.addEventListener("click", ev => { ev.stopPropagation(); S.fields = S.fields.filter(g => g!==f); drawFields(); updateLists(); });
+  return x;
 }
 function drawFields(){
-  document.querySelectorAll("#viewer .sigfield").forEach(n => n.remove());
+  document.querySelectorAll("#viewer .sigfield, #viewer .txtfield, #viewer .chkfield").forEach(n => n.remove());
   S.fields.forEach(f => {
     const wrap = document.querySelector('#viewer .page[data-page="'+f.page+'"]'); if (!wrap) return;
-    const d = document.createElement("div");
-    d.className = "sigfield" + (f.role==="vk"?" vk":"") + (f.sig?" signed":"") + (S.step===3 && !f.sig?" tap":"");
+    const d = document.createElement("div"); d.dataset.fid = f.id;
     Object.assign(d.style,{left:f.x*100+"%",top:f.y*100+"%",width:f.w*100+"%",height:f.h*100+"%"});
+    if (!isSig(f)){
+      const px = Math.max(8, Math.min(16, (wrap.clientHeight || 1000) * f.h * 0.7));
+      d.style.fontSize = px + "px";
+      if (f.kind==="check"){
+        d.className = "chkfield"; d.textContent = f.value ? "✕" : "";
+        if (S.step===2){ d.title = "Tippen zum Umschalten"; d.addEventListener("click", ev => { ev.stopPropagation(); f.value = !f.value; drawFields(); updateLists(); }); d.appendChild(removeBtn(f)); }
+      } else {
+        d.className = "txtfield" + (!f.value && S.step===2 ? " empty" : "");
+        if (S.step===2){
+          const inp = document.createElement("input"); inp.value = f.value || ""; inp.setAttribute("aria-label", f.label || "Textfeld");
+          inp.addEventListener("click", ev => ev.stopPropagation());
+          inp.addEventListener("input", () => {
+            f.value = inp.value; d.classList.toggle("empty", !f.value);
+            if (!f.formName){ // eigenes Textfeld wächst mit dem Text bis zum Seitenrand
+              const m = measure.getContext("2d"); m.font = px + "px Helvetica, Arial, sans-serif";
+              const need = (m.measureText(f.value).width + 12) / wrap.clientWidth;
+              f.w = Math.min(Math.max(f.minW || f.w, need), 1 - f.x); d.style.width = f.w*100 + "%";
+            }
+            if (f.formName) S.fields.forEach(g => { if (g!==f && g.formName===f.formName && g.kind==="text"){ g.value = f.value; const o = document.querySelector('[data-fid="'+g.id+'"] input'); if (o) o.value = f.value; } });
+          });
+          inp.addEventListener("change", updateLists);
+          d.append(inp, removeBtn(f));
+        } else { const sp = document.createElement("span"); sp.textContent = f.value || ""; d.appendChild(sp); }
+      }
+      wrap.appendChild(d); return;
+    }
+    d.className = "sigfield" + (f.role==="vk"?" vk":"") + (f.sig?" signed":"") + (S.step===3 && !f.sig?" tap":"");
     const lab = document.createElement("span"); lab.textContent = f.sig ? "✓ " + nameFor(f.role) : ROLE[f.role] + (S.step===3?" – hier unterschreiben":"");
     lab.style.position = "relative";
     if (f.sig){ const img = new Image(); img.src = f.sig.url; img.alt = "Unterschrift " + nameFor(f.role); d.appendChild(img); }
     d.appendChild(lab);
-    if (S.step===2){
-      const x = document.createElement("button"); x.className = "x"; x.textContent = "×"; x.setAttribute("aria-label","Feld entfernen");
-      x.addEventListener("click", ev => { ev.stopPropagation(); S.fields = S.fields.filter(g => g!==f); drawFields(); updateLists(); });
-      d.appendChild(x);
-    }
+    if (S.step===2) d.appendChild(removeBtn(f));
     if (S.step===3 && !f.sig){ d.setAttribute("role","button"); d.tabIndex = 0; d.addEventListener("click", () => openPad(f)); d.addEventListener("keydown", ev => { if (ev.key==="Enter") openPad(f); }); }
     wrap.appendChild(d);
   });
 }
+const jumpTo = f => document.querySelector('#viewer .page[data-page="'+f.page+'"]')?.scrollIntoView({ behavior:"smooth", block:"center" });
 function updateLists(){
   const mk = (f, withState) => {
     const li = document.createElement("li");
-    const dot = document.createElement("span"); dot.className = "dot" + (f.role==="vk"?" vk":"");
-    const tx = document.createElement("span"); tx.textContent = ROLE[f.role] + ": " + nameFor(f.role) + " · S. " + (f.page+1);
+    const dot = document.createElement("span"); dot.className = "dot" + (isSig(f) ? (f.role==="vk"?" vk":"") : " tx");
+    const tx = document.createElement("span"); tx.textContent = fieldName(f) + " · S. " + (f.page+1); tx.style.minWidth = "0"; tx.style.overflowWrap = "anywhere";
     const p = document.createElement("span"); p.className = "pill" + (f.sig?" ok":"");
     p.textContent = withState ? (f.sig ? "unterschrieben" : "offen") : "Seite " + (f.page+1);
     li.append(dot, tx); if (withState) li.append(p);
-    if (withState && f.sig) { li.style.cursor="default"; } else if (withState) { li.style.cursor="pointer"; li.addEventListener("click", () => openPad(f)); }
+    li.style.cursor = "pointer";
+    li.addEventListener("click", () => { if (withState && !f.sig) openPad(f); else jumpTo(f); });
     return li;
   };
   const fl = $("#fieldList"); fl.innerHTML = "";
-  if (!S.fields.length){ const e = document.createElement("li"); e.className="empty"; e.style.display="block"; e.textContent = "Noch keine Felder. Mindestens ein Käufer-Feld setzen."; fl.appendChild(e); }
+  if (!S.fields.length){ const e = document.createElement("li"); e.className="empty"; e.style.display="block"; e.textContent = "Noch keine Felder. Mindestens eine Käufer-Unterschrift setzen."; fl.appendChild(e); }
   S.fields.forEach(f => fl.appendChild(mk(f,false)));
-  $("#toSign").disabled = !S.fields.some(f => f.role==="kd");
-  const sl = $("#signList"); sl.innerHTML = ""; S.fields.forEach(f => sl.appendChild(mk(f,true)));
-  const all = S.fields.length && S.fields.every(f => f.sig);
+  $("#toSign").disabled = !S.fields.some(f => isSig(f) && f.role==="kd");
+  const sigs = S.fields.filter(isSig);
+  const sl = $("#signList"); sl.innerHTML = ""; sigs.forEach(f => sl.appendChild(mk(f,true)));
+  const all = sigs.length && sigs.every(f => f.sig);
   $("#finish").disabled = !all;
   $("#lockHint").textContent = all ? "Alle Unterschriften sind da." : (S.locked ? "Dokument ist gesperrt. Tippen Sie auf das nächste offene Feld." : "Tippen Sie auf ein markiertes Feld im Dokument.");
 }
-$("#toSign").addEventListener("click", () => { S.maxStep = 3; go(3); });
+$("#toSign").addEventListener("click", () => {
+  document.activeElement?.blur?.();
+  const empty = S.fields.filter(f => f.kind==="text" && !String(f.value||"").trim());
+  if (empty.length && !confirm(empty.length + (empty.length===1 ? " Textfeld ist" : " Textfelder sind") + " noch leer. Ab der ersten Unterschrift lässt sich nichts mehr ändern. Trotzdem weiter?")) { jumpTo(empty[0]); return; }
+  S.maxStep = 3; go(3);
+});
 
 /* ---------- Unterschrift-Pad ---------- */
 const cv = $("#padCanvas"); const ctx = cv.getContext("2d");
@@ -649,31 +769,66 @@ function wrapText(s, font, size, max){
 $("#finish").addEventListener("click", async () => {
   const btn = $("#finish"); btn.disabled = true; btn.textContent = "Wird erstellt …";
   const { PDFDocument, StandardFonts, rgb } = PDFLib;
-  const doc = await PDFDocument.load(S.orig);
+  const doc = await PDFDocument.load(S.orig, { ignoreEncryption:true });
   const f = await doc.embedFont(StandardFonts.Helvetica), fb = await doc.embedFont(StandardFonts.HelveticaBold), fm = await doc.embedFont(StandardFonts.Courier);
   const grey = rgb(.42,.38,.4), ink = rgb(.09,.08,.1);
   const pages = doc.getPages(); const now = new Date();
-  for (const fl of S.fields){
+  let form = null; try { form = doc.getForm(); } catch {}
+  for (const fl of S.fields.filter(g => !isSig(g))){
+    const pg = pages[fl.page]; const {width:W, height:H} = pg.getSize();
+    const bw = fl.w*W, bh = fl.h*H, x = fl.x*W, y = H-(fl.y+fl.h)*H;
+    if (fl.kind==="check"){
+      if (fl.value){ const m = Math.min(bw,bh)*0.18; pg.drawLine({start:{x:x+m,y:y+m},end:{x:x+bw-m,y:y+bh-m},thickness:1.2,color:ink}); pg.drawLine({start:{x:x+m,y:y+bh-m},end:{x:x+bw-m,y:y+m},thickness:1.2,color:ink}); }
+    } else if (fl.value){
+      const t = winAnsi(fl.value); let size = Math.min(11, Math.max(6, bh*0.68));
+      while (size > 5 && f.widthOfTextAtSize(t,size) > bw-4) size -= 0.5;
+      pg.drawText(t, {x:x+2, y:y+(bh-size)/2+size*0.22, size, font:f, color:ink});
+    }
+  }
+  // Übernommene Formularfelder: Werte sind oben fest ins PDF gezeichnet, die Eingabefelder selbst werden entfernt.
+  // (Ohne pdf-lib-flatten, das verwaiste Verweise hinterlässt.)
+  if (form && S.fields.some(g => g.formName)){
+    try {
+      const { PDFName, PDFRef } = PDFLib, ctx = doc.context, names = new Set(S.fields.filter(g => g.formName).map(g => g.formName));
+      const drop = form.getFields().filter(x => names.has(x.getName()));
+      const dicts = new Set(drop.flatMap(x => x.acroField.getWidgets().map(w => w.dict)));
+      pages.forEach(pg => {
+        const an = pg.node.Annots(); if (!an) return;
+        const keep = an.asArray().filter(r => !dicts.has(r instanceof PDFRef ? ctx.lookup(r) : r));
+        if (keep.length !== an.size()) pg.node.set(PDFName.of("Annots"), ctx.obj(keep));
+      });
+      drop.forEach(x => { try { form.acroForm.removeField(x.acroField); } catch {} });
+    } catch(e){ console.warn("Formularfelder entfernen", e); }
+  }
+  for (const fl of S.fields.filter(isSig)){
     const pg = pages[fl.page]; const {width:W, height:H} = pg.getSize();
     const png = await doc.embedPng(fl.sig.url);
     const bw = fl.w*W, bh = fl.h*H; const x = fl.x*W, y = H-(fl.y+fl.h)*H;
     pg.drawImage(png, {x, y:y+bh*0.12, width:bw, height:bh*0.88});
     pg.drawText(winAnsi("Elektronisch unterschrieben · " + fmtDT(fl.sig.signedAt)), {x:x+2, y:y+bh-7, size:5.5, font:f, color:grey});
   }
-  const total = pages.length + 1;
-  pages.forEach((pg,i) => pg.drawText(winAnsi("Prusseit Sign · Vorgang " + S.meta.vorgang + " · Seite " + (i+1) + "/" + total + " · Original SHA-256 " + S.origHash.slice(0,16) + "…"), {x:20, y:6, size:5.5, font:f, color:grey}));
-  // Prüfprotokoll
-  const p = doc.addPage([595.28,841.89]); let y = 790;
+  // Prüfprotokoll (bei Bedarf über mehrere Seiten)
+  const proto = []; let p, y;
+  const newPage = () => { p = doc.addPage([595.28,841.89]); proto.push(p); y = 790; };
+  const need = h => { if (y - h < 50){ newPage(); T("PRÜFPROTOKOLL (FORTSETZUNG)", 48, y, {size:11,font:fb}); y -= 28; } };
   const T = (s,x,yy,o={}) => p.drawText(winAnsi(s),{x,y:yy,size:o.size||9.5,font:o.font||f,color:o.color||ink});
+  newPage();
   T("PRÜFPROTOKOLL", 48, y, {size:18,font:fb}); y -= 18;
   T("Elektronische Unterzeichnung · erzeugt mit Prusseit Sign", 48, y, {size:9,color:grey}); y -= 30;
-  const row = (k, v, mono) => { T(k, 48, y, {color:grey}); wrapText(v, mono?fm:f, mono?8.5:9.5, 330).forEach((l,i) => T(l, 210, y - i*13, {font:mono?fm:f, size:mono?8.5:9.5})); y -= 13*Math.max(1,wrapText(v, mono?fm:f, mono?8.5:9.5, 330).length) + 7; };
-  const sect = s => { y -= 6; T(s.toUpperCase(), 48, y, {size:8.5,font:fb,color:grey}); p.drawLine({start:{x:48,y:y-5},end:{x:547,y:y-5},thickness:.6,color:rgb(.85,.82,.83)}); y -= 22; };
+  const row = (k, v, mono) => {
+    const ls = wrapText(v, mono?fm:f, mono?8.5:9.5, 330), kl = wrapText(k, f, 9.5, 150);
+    const h = 13*Math.max(ls.length, kl.length);
+    need(h);
+    kl.forEach((l,i) => T(l, 48, y - i*13, {color:grey}));
+    ls.forEach((l,i) => T(l, 210, y - i*13, {font:mono?fm:f, size:mono?8.5:9.5}));
+    y -= h + 7;
+  };
+  const sect = s => { need(60); y -= 6; T(s.toUpperCase(), 48, y, {size:8.5,font:fb,color:grey}); p.drawLine({start:{x:48,y:y-5},end:{x:547,y:y-5},thickness:.6,color:rgb(.85,.82,.83)}); y -= 22; };
   sect("Dokument");
   row("Datei", S.fileName); row("Vorgang", S.meta.vorgang); row("Vorgangs-ID", S.dealId || "–", true); row("Seiten (ohne Protokoll)", String(pages.length));
   row("Original SHA-256", S.origHash, true);
   row("Verkäufer (angemeldet)", S.meta.verkaeufer + " <" + me.email + ">"); row("Abgeschlossen", fmtDT(now) + " (" + Intl.DateTimeFormat().resolvedOptions().timeZone + ")");
-  for (const fl of S.fields){
+  for (const fl of S.fields.filter(isSig)){
     sect("Unterschrift " + ROLE[fl.role]);
     const s = fl.sig;
     row("Name", s.name); row("Zeitpunkt", fmtDT(s.signedAt)); row("Eingabe", s.input + (s.pressure ? ", mit Druckdaten" : ", ohne Druckdaten"));
@@ -681,12 +836,20 @@ $("#finish").addEventListener("click", async () => {
     row("Biometrie SHA-256", s.bioHash, true);
     if (s.consent) row("Erklärung", "Bestätigt: Vertrag gelesen, elektronische Unterzeichnung des Dokuments mit obigem Fingerabdruck.");
   }
+  const filled = S.fields.filter(g => !isSig(g));
+  if (filled.length){
+    sect("Ausgefüllte Felder (vor der ersten Unterschrift festgeschrieben)");
+    filled.forEach(g => row((g.formName ? g.label : (g.kind==="check" ? "Kreuz" : "Textfeld")) + " · S. " + (g.page+1), g.kind==="check" ? (g.value ? "angekreuzt" : "nicht angekreuzt") : (g.value || "(leer)")));
+  }
   sect("Gerät");
   row("Browser / System", navigator.userAgent);
-  y -= 8;
-  wrapText("Original, Unterschriftsereignisse und dieses Dokument sind im Archiv der Autowelt Prusseit GmbH unter der Vorgangs-ID gespeichert; das Ereignisprotokoll ist per SHA-256 verkettet und nachträglich nicht änderbar. Ein Zertifikatssiegel (PAdES) mit Zeitstempel wird in einer folgenden Version ergänzt.", f, 8.5, 499)
-    .forEach(l => { T(l, 48, y, {size:8.5,color:grey}); y -= 12; });
-  p.drawText(winAnsi("Prusseit Sign · Vorgang " + S.meta.vorgang + " · Seite " + total + "/" + total), {x:20, y:6, size:5.5, font:f, color:grey});
+  const note = wrapText("Original, Unterschriftsereignisse und dieses Dokument sind im Archiv der Autowelt Prusseit GmbH unter der Vorgangs-ID gespeichert; das Ereignisprotokoll ist per SHA-256 verkettet und nachträglich nicht änderbar. Ein Zertifikatssiegel (PAdES) mit Zeitstempel wird in einer folgenden Version ergänzt.", f, 8.5, 499);
+  need(note.length*12 + 8); y -= 8;
+  note.forEach(l => { T(l, 48, y, {size:8.5,color:grey}); y -= 12; });
+  const total = pages.length + proto.length;
+  pages.forEach((pg,i) => pg.drawText(winAnsi("Prusseit Sign · Vorgang " + S.meta.vorgang + " · Seite " + (i+1) + "/" + total + " · Original SHA-256 " + S.origHash.slice(0,16) + "…"), {x:20, y:6, size:5.5, font:f, color:grey}));
+  proto.forEach((pg,i) => pg.drawText(winAnsi("Prusseit Sign · Vorgang " + S.meta.vorgang + " · Prüfprotokoll · Seite " + (pages.length+i+1) + "/" + total), {x:20, y:6, size:5.5, font:f, color:grey}));
+  S.protoPages = proto.length;
   doc.setTitle("Kaufvertrag " + S.meta.vorgang + " (unterschrieben)"); doc.setProducer("Prusseit Sign"); doc.setKeywords(["sha256:" + S.origHash]);
   doc.setModificationDate(now);
   S.final = await doc.save(); S.finalHash = await sha256(S.final);
@@ -699,7 +862,7 @@ async function showFinal(now){
   $("#doneLede").textContent = "Alle Unterschriften sind eingebettet, das Prüfprotokoll hängt als letzte Seite an. " + fmtDT(now) + ".";
   const dl = $("#summary"); dl.innerHTML = "";
   const add = (k,v,mono) => { const dt=document.createElement("dt"); dt.textContent=k; const dd=document.createElement("dd"); dd.textContent=v; if(mono){dd.style.fontFamily="var(--f-mono)";dd.style.fontSize="13px";} dl.append(dt,dd); };
-  add("Vorgang", S.meta.vorgang); add("Kunde", S.meta.kunde); add("Unterschriften", S.fields.length + " von " + S.fields.length);
+  add("Vorgang", S.meta.vorgang); add("Kunde", S.meta.kunde); add("Unterschriften", S.fields.filter(isSig).length + " von " + S.fields.filter(isSig).length);
   add("Original", short(S.origHash), true); add("Final", short(S.finalHash), true);
   $("#mailTo").textContent = S.meta.mail || "keine Adresse angegeben";
   $("#mailSubj").textContent = "Ihr Kaufvertrag " + S.meta.vorgang + " – Autowelt Prusseit";
@@ -719,7 +882,7 @@ $("#savePdf").addEventListener("click", async () => {
   catch(e){ m.classList.add("err"); m.textContent = e?.code==="declined" ? "Speichern abgebrochen." : "Speichern hat nicht geklappt. Bitte noch einmal versuchen."; }
 });
 $("#sendMail").addEventListener("click", () => { $("#mailMsg").hidden = false; });
-function resetDeal(){ S.orig=null; S.fields=[]; S.locked=false; S.dbLocked=false; S.dealId=null; S.final=null; S.maxStep=1; $("#viewer").innerHTML=""; $("#finalViewer").innerHTML=""; ["#mNr","#mKd","#mMail","#mFz"].forEach(q => $(q).value = ""); }
+function resetDeal(){ views.forEach(v => { v.io.disconnect(); v.pdf.destroy(); }); views.clear(); S.orig=null; S.fields=[]; S.locked=false; S.dbLocked=false; S.dealId=null; S.final=null; S.maxStep=1; $("#viewer").innerHTML=""; $("#finalViewer").innerHTML=""; ["#mNr","#mKd","#mMail","#mFz"].forEach(q => $(q).value = ""); }
 $("#restart").addEventListener("click", () => { resetDeal(); go(1); });
 
 /* ---------- Anmeldung ---------- */
