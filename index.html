@@ -242,7 +242,9 @@ p{margin:0}
     <div class="arch-tools">
       <input id="archQ" type="search" placeholder="Kunde, Vorgang oder Fahrzeug suchen">
       <button class="btn small" id="archBack">Neuer Vorgang</button>
+      <button class="btn small" id="pushBtn" hidden>Push bei Verkauf aktivieren</button>
     </div>
+    <p class="toast" id="pushMsg" hidden style="margin-top:10px"></p>
     <div class="arch" id="archList"></div>
   </section>
 
@@ -332,11 +334,11 @@ p{margin:0}
           <p class="toast" id="archMsg" hidden></p>
         </div>
         <div class="panel mail">
-          <h3>Kopie an den Kunden</h3>
-          <dl class="kv"><dt>An</dt><dd id="mailTo"></dd><dt>Betreff</dt><dd id="mailSubj"></dd></dl>
-          <pre id="mailBody"></pre>
-          <button class="btn dark block" id="sendMail">Mit PDF senden</button>
-          <p class="toast err" id="mailMsg" hidden>Der Mailversand wird gerade eingerichtet. Bis dahin das PDF speichern und selbst schicken. Es liegt bereits im Archiv.</p>
+          <h3>Versand per E-Mail</h3>
+          <label class="fld"><span class="label">E-Mail Kunde</span><input id="mailAddr" type="email" autocomplete="off" placeholder="kunde@beispiel.de"></label>
+          <p class="hint">Der Kunde bekommt das PDF, Antworten gehen an dich. Du und die Geschäftsleitung bekommen eine Kopie.</p>
+          <button class="btn dark block" id="sendMail">Erneut senden</button>
+          <p class="toast" id="mailMsg" hidden></p>
         </div>
         <button class="btn block" id="restart">Neuer Vorgang</button>
       </aside>
@@ -618,6 +620,7 @@ async function archiveFinal(){
     if (error) throw error;
     await audit("completed", { final_sha256:S.finalHash, pages:S.pageSizes.length + (S.protoPages||1) });
     m.textContent = "Im Archiv gespeichert.";
+    sendContract(false);
   } catch(e) { console.error(e); m.classList.add("err"); m.textContent = "Archivierung fehlgeschlagen: " + (e.message||e) + ". Bitte PDF zusätzlich speichern."; }
 }
 
@@ -1038,9 +1041,7 @@ async function showFinal(now){
   const add = (k,v,mono) => { const dt=document.createElement("dt"); dt.textContent=k; const dd=document.createElement("dd"); dd.textContent=v; if(mono){dd.style.fontFamily="var(--f-mono)";dd.style.fontSize="13px";} dl.append(dt,dd); };
   add("Vorgang", S.meta.vorgang); add("Kunde", S.meta.kunde); add("Unterschriften", S.fields.filter(isSig).length + " von " + S.fields.filter(isSig).length);
   add("Original", short(S.origHash), true); add("Final", short(S.finalHash), true);
-  $("#mailTo").textContent = S.meta.mail || "keine Adresse angegeben";
-  $("#mailSubj").textContent = "Ihr Kaufvertrag " + S.meta.vorgang + " – Autowelt Prusseit";
-  $("#mailBody").textContent = "Guten Tag " + S.meta.kunde + ",\n\nanbei erhalten Sie Ihren unterschriebenen Kaufvertrag " + S.meta.vorgang + " als PDF. Die letzte Seite enthält das Prüfprotokoll der elektronischen Unterzeichnung.\n\nVielen Dank für Ihr Vertrauen.\n\nMit freundlichen Grüßen\n" + S.meta.verkaeufer + "\nAutowelt Prusseit GmbH";
+  $("#mailAddr").value = S.meta.mail || ""; $("#sendMail").textContent = "Senden"; S.sent = false;
   $("#saveMsg").hidden = true; $("#mailMsg").hidden = true; $("#archMsg").hidden = true;
   $("#savePdf").hidden = false;
   await renderDoc(S.final, $("#finalViewer"), false);
@@ -1055,7 +1056,28 @@ $("#savePdf").addEventListener("click", async () => {
   try { await downloads.save({ filename: S.fileName.endsWith(".pdf") ? S.fileName.replace(/\.pdf$/,"_unterschrieben.pdf").replace("_unterschrieben_unterschrieben","_unterschrieben") : S.fileName + ".pdf", data: new Blob([S.final], {type:"application/pdf"}) }); m.textContent = "PDF gespeichert."; }
   catch(e){ m.classList.add("err"); m.textContent = e?.code==="declined" ? "Speichern abgebrochen." : "Speichern hat nicht geklappt. Bitte noch einmal versuchen."; }
 });
-$("#sendMail").addEventListener("click", () => { $("#mailMsg").hidden = false; });
+/* ---------- Versand (Edge Function send-contract) ---------- */
+async function sendContract(resend){
+  const m = $("#mailMsg"), b = $("#sendMail");
+  m.hidden = false; m.classList.remove("err"); m.textContent = "Wird verschickt …"; b.disabled = true;
+  try {
+    const addr = $("#mailAddr").value.trim();
+    if (addr !== (S.meta.mail || "")){
+      if (addr && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) throw new Error("Die E-Mail-Adresse des Kunden sieht nicht gültig aus.");
+      const u = await sb.from("deals").update({ customer_email: addr || null }).eq("id", S.dealId);
+      if (u.error) throw u.error;
+      S.meta.mail = addr; await audit("customer_email_changed", { email: addr || null });
+    }
+    const { data, error } = await sb.functions.invoke("send-contract", { body: { deal_id:S.dealId, resend:!!resend } });
+    if (error){ let msg = error.message; try { msg = (await error.context.json()).error || msg; } catch {} throw new Error(msg); }
+    const r = data?.results || {};
+    if (r.mail) throw new Error("Mailversand ist noch nicht eingerichtet. Das PDF liegt im Archiv.");
+    S.sent = true; b.textContent = "Erneut senden";
+    m.textContent = (S.meta.mail ? "Verschickt an " + S.meta.mail + ", Kopie an dich und die Geschäftsleitung." : "Kopie an dich und die Geschäftsleitung verschickt. Der Kunde hat keine E-Mail-Adresse.");
+  } catch(e){ console.error(e); m.classList.add("err"); m.textContent = "Versand fehlgeschlagen: " + (e.message||e); }
+  finally { b.disabled = false; }
+}
+$("#sendMail").addEventListener("click", () => sendContract(S.sent));
 function resetDeal(){ views.forEach(v => { v.io.disconnect(); v.pdf.destroy(); }); views.clear(); S.orig=null; S.fields=[]; S.locked=false; S.dbLocked=false; S.dealId=null; S.final=null; S.maxStep=1; $("#viewer").innerHTML=""; $("#finalViewer").innerHTML=""; ["#mNr","#mKd","#mMail","#mFz"].forEach(q => $(q).value = ""); S.kv = null; S.atts = []; S.parts = null; showDocs(); }
 $("#restart").addEventListener("click", () => { resetDeal(); go(1); });
 
@@ -1126,7 +1148,7 @@ async function showArchive(){
   const list = $("#archList"); list.innerHTML = '<p class="empty">Wird geladen …</p>';
   const { data, error } = await sb.from("deals").select("id,contract_no,vehicle,customer_name,status,created_at,signed_at,final_path,original_path,profiles(full_name,email)").order("created_at", { ascending:false }).limit(500);
   if (error){ list.innerHTML = ""; const p = document.createElement("p"); p.className = "toast err"; p.textContent = "Archiv konnte nicht geladen werden: " + error.message; list.appendChild(p); return; }
-  archRows = data; renderArchive();
+  archRows = data; renderArchive(); pushState().catch(() => {});
   window.scrollTo({top:0, behavior:"instant"});
 }
 function renderArchive(){
@@ -1153,6 +1175,31 @@ function renderArchive(){
   });
 }
 $("#archQ").addEventListener("input", renderArchive);
+
+/* ---------- Push „Fahrzeug verkauft“ (für Admins) ---------- */
+const VAPID_PUBLIC = "BL2pqdwCpn4ZuBjFonRhHZDgTUa0jUi2OBy6jI_A0Xx8GHqesg0CTikP2ZgH8JXF3ilVBqv_DYbMFZiqpjQapxc";
+const pushOk = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+async function pushState(){
+  const b = $("#pushBtn"); b.hidden = !(me?.role==="admin");
+  if (b.hidden) return;
+  if (!pushOk()){ b.textContent = "Push: auf dem iPad erst „Zum Home-Bildschirm“"; b.disabled = true; return; }
+  const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription();
+  b.disabled = false; b.textContent = sub && Notification.permission==="granted" ? "Push ist aktiv ✓" : "Push bei Verkauf aktivieren";
+}
+$("#pushBtn").addEventListener("click", async () => {
+  const m = $("#pushMsg"); m.hidden = false; m.classList.remove("err");
+  try {
+    if (await Notification.requestPermission() !== "granted") throw new Error("Mitteilungen wurden nicht erlaubt. Das lässt sich in den Einstellungen des Geräts ändern.");
+    const reg = await navigator.serviceWorker.ready;
+    const key = Uint8Array.from(atob(VAPID_PUBLIC.replace(/-/g,"+").replace(/_/g,"/")), c => c.charCodeAt(0));
+    const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:key });
+    const j = sub.toJSON();
+    const { error } = await sb.from("push_subscriptions").upsert({ user_id:me.id, endpoint:j.endpoint, keys:j.keys }, { onConflict:"endpoint" });
+    if (error) throw error;
+    m.textContent = "Fertig. Du bekommst auf diesem Gerät eine Nachricht, sobald ein Vertrag unterschrieben ist.";
+  } catch(e){ m.classList.add("err"); m.textContent = "Push konnte nicht aktiviert werden: " + (e.message||e); }
+  pushState();
+});
 $("#navArch").addEventListener("click", () => {
   if (S.locked && !S.final && !confirm("Der aktuelle Vorgang ist noch nicht abgeschlossen. Trotzdem zum Archiv?")) return;
   showArchive();
