@@ -108,7 +108,14 @@ p{margin:0}
 @media (prefers-reduced-motion:reduce){.sigfield.tap{animation:none}}
 
 .side{position:sticky;top:calc(env(safe-area-inset-top,0px) + 84px);display:flex;flex-direction:column;gap:16px;min-width:0}
-.side > .panel{max-height:calc(100vh - env(safe-area-inset-top,0px) - 100px);max-height:calc(100dvh - env(safe-area-inset-top,0px) - 100px);overflow:auto;overscroll-behavior:contain}
+.side{max-height:calc(100vh - env(safe-area-inset-top,0px) - 100px);max-height:calc(100dvh - env(safe-area-inset-top,0px) - 100px);overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.side > *{flex:none}
+.rs{position:absolute;right:-13px;bottom:-13px;width:26px;height:26px;border-radius:50%;background:var(--red);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3);cursor:nwse-resize;touch-action:none;z-index:3;padding:0}
+.grip{position:absolute;left:0;top:-32px;width:26px;height:30px;border-radius:6px;border:0;background:var(--ink);color:var(--surface);display:grid;place-items:center;cursor:move;touch-action:none;font-size:13px;z-index:3;padding:0}
+.drag{cursor:move;touch-action:none}
+.dragging{opacity:.75;outline:2px solid var(--red)}
+.txtfield .x,.chkfield .x{top:-32px;right:auto;left:32px;width:26px;height:26px}
+.chkfield .x{left:0}
 .side .list{flex:none}
 #toSign,#finish{position:sticky;bottom:0;flex:none;box-shadow:0 -8px 12px var(--surface)}
 .hash{font-family:var(--f-mono);font-size:13px;word-break:break-all;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-variant-numeric:tabular-nums}
@@ -183,7 +190,7 @@ p{margin:0}
 
 @media (max-width:900px){
   .start,.work{grid-template-columns:minmax(0,1fr)}
-  .side{position:static;order:-1}
+  .side{position:static;order:-1;max-height:none;overflow:visible}
   .steps{margin-left:0;width:100%}
   .step span{display:none}
 }
@@ -722,7 +729,7 @@ function setPlacing(kind){
   S.placing = kind;
   Object.entries(PLACE).forEach(([k,q]) => $(q).classList.toggle("on", kind===k));
   document.querySelectorAll("#viewer .page").forEach(p => p.classList.toggle("placing", !!kind));
-  $("#placeHint").textContent = kind ? PLACE_HINT[kind] : "Feldart wählen, dann auf die Stelle im Dokument tippen.";
+  $("#placeHint").textContent = kind ? PLACE_HINT[kind] : "Feldart wählen, dann auf die Stelle im Dokument tippen. Felder lassen sich danach verschieben, mit dem roten Punkt änderst du die Größe.";
 }
 Object.entries(PLACE).forEach(([k,q]) => $(q).addEventListener("click", () => setPlacing(S.placing===k ? null : k)));
 function placeAt(e, wrap){
@@ -749,6 +756,51 @@ function removeBtn(f){
   x.addEventListener("click", ev => { ev.stopPropagation(); S.fields = S.fields.filter(g => g!==f); drawFields(); updateLists(); });
   return x;
 }
+/* Felder im Schritt 2 verschieben (ziehen) und in der Größe ändern (roter Punkt unten rechts) */
+const clamp = (v,a,b) => Math.min(Math.max(v,a),b);
+function dragFrom(handle, d, f, wrap, onTap){
+  handle.addEventListener("pointerdown", e => {
+    if (e.target !== handle && e.target.closest(".x,.rs,input")) return;
+    e.preventDefault(); e.stopPropagation();
+    const r = wrap.getBoundingClientRect(), sx = e.clientX, sy = e.clientY, ox = f.x, oy = f.y; let moved = false;
+    handle.setPointerCapture(e.pointerId);
+    const mv = ev => {
+      if (!moved && Math.hypot(ev.clientX-sx, ev.clientY-sy) < 6) return;
+      moved = true; d.classList.add("dragging");
+      f.x = clamp(ox + (ev.clientX-sx)/r.width, 0, 1-f.w); f.y = clamp(oy + (ev.clientY-sy)/r.height, 0, 1-f.h);
+      d.style.left = f.x*100 + "%"; d.style.top = f.y*100 + "%";
+    };
+    const up = () => {
+      handle.removeEventListener("pointermove", mv); handle.removeEventListener("pointerup", up); handle.removeEventListener("pointercancel", up);
+      d.classList.remove("dragging");
+      if (!moved && onTap) onTap();
+    };
+    handle.addEventListener("pointermove", mv); handle.addEventListener("pointerup", up); handle.addEventListener("pointercancel", up);
+  });
+  handle.addEventListener("click", ev => ev.stopPropagation());
+}
+function resizer(d, f, wrap){
+  const h = document.createElement("button"); h.className = "rs"; h.setAttribute("aria-label","Größe ändern");
+  h.addEventListener("click", ev => ev.stopPropagation());
+  h.addEventListener("pointerdown", e => {
+    e.preventDefault(); e.stopPropagation();
+    const r = wrap.getBoundingClientRect(), sx = e.clientX, sy = e.clientY, ow = f.w, oh = f.h, ps = S.pageSizes[f.page];
+    const minW = (f.kind==="check" ? 6 : 30)/ps.width, minH = (f.kind==="check" ? 6 : 8)/ps.height;
+    h.setPointerCapture(e.pointerId);
+    const mv = ev => {
+      f.w = clamp(ow + (ev.clientX-sx)/r.width, minW, 1-f.x); f.h = clamp(oh + (ev.clientY-sy)/r.height, minH, 1-f.y);
+      if (f.kind==="check") f.h = f.w*ps.width/ps.height;
+      d.style.width = f.w*100 + "%"; d.style.height = f.h*100 + "%";
+    };
+    const up = () => {
+      h.removeEventListener("pointermove", mv); h.removeEventListener("pointerup", up); h.removeEventListener("pointercancel", up);
+      if (f.kind==="text"){ f.minW = f.w; f.maxW = f.w; }
+      drawFields();
+    };
+    h.addEventListener("pointermove", mv); h.addEventListener("pointerup", up); h.addEventListener("pointercancel", up);
+  });
+  return h;
+}
 function drawFields(){
   document.querySelectorAll("#viewer .sigfield, #viewer .txtfield, #viewer .chkfield").forEach(n => n.remove());
   S.fields.forEach(f => {
@@ -760,7 +812,7 @@ function drawFields(){
       d.style.fontSize = px + "px";
       if (f.kind==="check"){
         d.className = "chkfield"; d.textContent = f.value ? "✕" : "";
-        if (S.step===2){ d.title = "Tippen zum Umschalten"; d.addEventListener("click", ev => { ev.stopPropagation(); f.value = !f.value; drawFields(); updateLists(); }); d.appendChild(removeBtn(f)); }
+        if (S.step===2){ d.title = "Tippen zum Umschalten, ziehen zum Verschieben"; d.classList.add("drag"); dragFrom(d, d, f, wrap, () => { f.value = !f.value; drawFields(); updateLists(); }); d.append(removeBtn(f), resizer(d, f, wrap)); }
       } else {
         d.className = "txtfield" + (f.optional ? " opt" : "") + (!f.value && !f.optional && S.step===2 ? " empty" : "");
         if (S.step===2){
@@ -775,8 +827,10 @@ function drawFields(){
             }
             if (f.formName) S.fields.forEach(g => { if (g!==f && g.formName===f.formName && g.kind==="text"){ g.value = f.value; const o = document.querySelector('[data-fid="'+g.id+'"] input'); if (o) o.value = f.value; } });
           });
-          inp.addEventListener("change", updateLists);
-          d.append(inp, removeBtn(f));
+          inp.addEventListener("change", updateLists); inp.addEventListener("blur", updateLists);
+          const g = document.createElement("button"); g.className = "grip"; g.textContent = "✥"; g.setAttribute("aria-label","Feld verschieben");
+          dragFrom(g, d, f, wrap);
+          d.append(inp, g, removeBtn(f), resizer(d, f, wrap));
         } else { const sp = document.createElement("span"); sp.textContent = f.value || ""; d.appendChild(sp); }
       }
       wrap.appendChild(d); return;
@@ -786,7 +840,7 @@ function drawFields(){
     lab.style.position = "relative";
     if (f.sig){ const img = new Image(); img.src = f.sig.url; img.alt = "Unterschrift " + nameFor(f.role); d.appendChild(img); }
     d.appendChild(lab);
-    if (S.step===2) d.appendChild(removeBtn(f));
+    if (S.step===2){ d.classList.add("drag"); d.title = "Ziehen zum Verschieben"; dragFrom(d, d, f, wrap); d.append(removeBtn(f), resizer(d, f, wrap)); }
     if (S.step===3 && !f.sig){ d.setAttribute("role","button"); d.tabIndex = 0; d.addEventListener("click", () => openPad(f)); d.addEventListener("keydown", ev => { if (ev.key==="Enter") openPad(f); }); }
     wrap.appendChild(d);
   });
