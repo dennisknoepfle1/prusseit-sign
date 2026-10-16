@@ -16,117 +16,167 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: schwarze Werkzeugleiste mit Schritten oben, darunter eine Arbeitsfläche – links Dokument, rechts Steuerung (stapelt auf schmalen Geräten) */
+/* Layout: schwarze Glas-Kopfleiste mit Logo und Schritten, darunter die Arbeitsfläche – links Dokument, rechts Steuerung (stapelt auf schmalen Geräten) */
 :root{
-  --bg:#F4F3F3; --surface:#FFFFFF; --ink:#18151A; --muted:#6A6265; --line:#E1DCDD;
-  --red:#E3001B; --red-ink:#B30016; --red-soft:#FCE6E8; --ok:#1E7A4C; --ok-soft:#E3F3EA;
-  --paper:#FFFFFF; --sig:#14306E; --bar:#0E0C0D; --bar-fg:#F3F1F1; --bar-muted:#8E8689;
+  --bg:#F4F2F1; --surface:#FFFFFF; --surface-2:#FAF9F8; --ink:#16131A; --muted:#6A6265; --line:#E6E1E2; --line-2:#D9D3D4;
+  --red:#E3001B; --red-hi:#FF1F3A; --red-ink:#B30016; --red-soft:#FDE8EA; --ok:#1E7A4C; --ok-soft:#E4F4EB;
+  --blue:#3B5BA9; --blue-soft:rgba(59,91,169,.08);
+  --paper:#FFFFFF; --sig:#14306E; --bar:#0B0A0B; --bar-fg:#F5F3F3; --bar-muted:#8E8689;
   --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
   --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
-  --r:10px;
+  --r:14px; --r-sm:10px;
+  --sh-1:0 1px 2px rgba(22,19,26,.05),0 2px 8px rgba(22,19,26,.04);
+  --sh-2:0 2px 4px rgba(22,19,26,.05),0 12px 32px rgba(22,19,26,.08);
+  --sh-red:0 6px 20px rgba(227,0,27,.28);
+  --ease:cubic-bezier(.2,.8,.2,1); --ease-out:cubic-bezier(.16,1,.3,1);
+  --head:68px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#131112; --surface:#1C191A; --ink:#F1EDEE; --muted:#A39A9D; --line:#332D2F;
-  --red:#FF2A40; --red-ink:#FF6474; --red-soft:#3A1519; --ok:#4DC48B; --ok-soft:#14301F;
-  --paper:#FFFFFF; --sig:#14306E; --bar:#080707; --bar-fg:#F3F1F1; --bar-muted:#8E8689; color-scheme:dark}}
+  --bg:#110F10; --surface:#1A1718; --surface-2:#211D1F; --ink:#F3EFF0; --muted:#A39A9D; --line:#2E292B; --line-2:#3A3436;
+  --red:#FF2A40; --red-hi:#FF4A5D; --red-ink:#FF6474; --red-soft:#3A1519; --ok:#4DC48B; --ok-soft:#14301F;
+  --blue:#7C9BEA; --blue-soft:rgba(124,155,234,.10);
+  --paper:#FFFFFF; --sig:#14306E; --bar:#070606; --bar-fg:#F3F1F1; --bar-muted:#8E8689;
+  --sh-1:0 1px 2px rgba(0,0,0,.3); --sh-2:0 12px 32px rgba(0,0,0,.4); color-scheme:dark}}
 :root[data-theme="dark"]{
-  --bg:#131112; --surface:#1C191A; --ink:#F1EDEE; --muted:#A39A9D; --line:#332D2F;
-  --red:#FF2A40; --red-ink:#FF6474; --red-soft:#3A1519; --ok:#4DC48B; --ok-soft:#14301F;
-  --paper:#FFFFFF; --sig:#14306E; --bar:#080707; --bar-fg:#F3F1F1; --bar-muted:#8E8689; color-scheme:dark}
+  --bg:#110F10; --surface:#1A1718; --surface-2:#211D1F; --ink:#F3EFF0; --muted:#A39A9D; --line:#2E292B; --line-2:#3A3436;
+  --red:#FF2A40; --red-hi:#FF4A5D; --red-ink:#FF6474; --red-soft:#3A1519; --ok:#4DC48B; --ok-soft:#14301F;
+  --blue:#7C9BEA; --blue-soft:rgba(124,155,234,.10);
+  --paper:#FFFFFF; --sig:#14306E; --bar:#070606; --bar-fg:#F3F1F1; --bar-muted:#8E8689;
+  --sh-1:0 1px 2px rgba(0,0,0,.3); --sh-2:0 12px 32px rgba(0,0,0,.4); color-scheme:dark}
 
 html,body{height:100%}
-body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.45;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.45;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bar)}
 button,input{font:inherit;color:inherit}
 .gutter{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+::selection{background:var(--red);color:#fff}
+
+/* Splash beim Start */
+.splash{position:fixed;inset:0;z-index:50;background:var(--bar);display:grid;place-items:center;transition:opacity .5s var(--ease),visibility .5s}
+.splash.out{opacity:0;visibility:hidden}
+.splash-in{display:flex;flex-direction:column;align-items:center;gap:18px}
+.splash img{width:min(240px,60vw);height:auto;animation:logoIn .9s var(--ease-out) backwards}
+.splash .sweep{width:min(240px,60vw);height:2px;background:linear-gradient(90deg,transparent,var(--red),transparent);background-size:50% 100%;background-repeat:no-repeat;animation:sweep 1.2s var(--ease) .2s infinite}
+@keyframes logoIn{from{opacity:0;transform:translateY(10px) scale(.96);filter:blur(4px)}to{opacity:1;transform:none;filter:none}}
+@keyframes sweep{from{background-position:-100% 0}to{background-position:200% 0}}
 
 /* Kopfleiste */
-.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bar);color:var(--bar-fg)}
-.bar-in{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding-block:12px;max-width:1280px;margin:0 auto}
-.brand{display:flex;align-items:baseline;gap:10px;font-family:var(--f-display);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
-.brand b{font-size:22px;font-weight:700}
-.brand b span{color:var(--red)}
-.brand em{font-style:normal;font-size:13px;color:var(--bar-muted);letter-spacing:.12em}
-.steps{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
-.step{display:flex;align-items:center;gap:8px;border:0;background:transparent;color:var(--bar-muted);padding:8px 12px;border-radius:999px;cursor:pointer;font-weight:500;font-size:15px}
-.step i{font-style:normal;font-family:var(--f-mono);font-size:12px;width:22px;height:22px;display:grid;place-items:center;border-radius:50%;border:1px solid currentColor}
-.step[aria-current="step"]{color:var(--bar-fg);background:#2A2526}
-.step[aria-current="step"] i{background:var(--red);border-color:var(--red);color:#fff}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:color-mix(in srgb,var(--bar) 88%,transparent);-webkit-backdrop-filter:saturate(1.4) blur(14px);backdrop-filter:saturate(1.4) blur(14px);color:var(--bar-fg);border-bottom:1px solid rgba(255,255,255,.06)}
+.bar-in{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding-block:12px;max-width:1280px;margin:0 auto;min-height:44px}
+.brand{display:flex;align-items:center;gap:12px;white-space:nowrap;text-decoration:none;color:inherit}
+.brand img{height:36px;width:auto;display:block}
+.brand em{font-style:normal;font-family:var(--f-display);font-weight:600;font-size:13px;letter-spacing:.22em;color:var(--bar-muted);text-transform:uppercase;padding-left:12px;border-left:1px solid #2e292b;line-height:26px}
+.steps{position:relative;display:flex;gap:2px;margin-left:auto;flex-wrap:wrap;padding:4px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06)}
+.step{position:relative;z-index:1;display:flex;align-items:center;gap:8px;border:0;background:transparent;color:var(--bar-muted);padding:8px 14px;border-radius:999px;cursor:pointer;font-weight:500;font-size:15px;transition:color .25s var(--ease)}
+.step i{font-style:normal;font-family:var(--f-mono);font-size:12px;width:22px;height:22px;display:grid;place-items:center;border-radius:50%;border:1px solid currentColor;transition:all .3s var(--ease)}
+.step[aria-current="step"]{color:var(--bar-fg)}
+.step[aria-current="step"] i{background:var(--red);border-color:var(--red);color:#fff;box-shadow:0 0 0 4px rgba(227,0,27,.2)}
+.step.done{color:#cfc9ca}
 .step.done i{background:var(--bar-fg);color:var(--bar);border-color:var(--bar-fg)}
-.step:disabled{opacity:.45;cursor:default}
-.proto{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;color:var(--bar-muted);border:1px solid #3a3335;padding:3px 7px;border-radius:4px}
+.step:disabled{opacity:.5;cursor:default}
+.step-ind{position:absolute;z-index:0;top:4px;bottom:4px;left:0;width:0;border-radius:999px;background:#262123;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);transition:transform .45s var(--ease-out),width .45s var(--ease-out)}
 
-main{max-width:1280px;margin:0 auto;padding-block:24px 64px}
-h1,h2,h3{font-family:var(--f-display);text-transform:uppercase;letter-spacing:.02em;line-height:1.05;text-wrap:balance;margin:0}
-h1{font-size:clamp(30px,4.2vw,46px)}
-h2{font-size:24px}
-h3{font-size:18px;letter-spacing:.05em}
+main{max-width:1280px;margin:0 auto;padding-block:28px 72px}
+h1,h2,h3{font-family:var(--f-display);text-transform:uppercase;letter-spacing:.02em;line-height:1.02;text-wrap:balance;margin:0}
+h1{font-size:clamp(32px,4.4vw,52px);font-weight:700}
+h1 .acc{color:var(--red)}
+h2{font-size:24px;font-weight:700}
+h3{font-size:18px;letter-spacing:.06em;font-weight:700}
 p{margin:0}
-.lede{color:var(--muted);max-width:60ch;margin-top:8px}
-.label{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--red-ink);margin-bottom:10px}
+.eyebrow::before{content:"";width:18px;height:2px;background:var(--red);border-radius:2px}
+.lede{color:var(--muted);max-width:62ch;margin-top:10px;font-size:17px}
+.label{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+
+/* Bewegung: Abschnitte und Karten blenden weich ein */
+.enter{animation:rise .55s var(--ease-out) backwards}
+.enter .panel,.enter .arch-row,.enter .page{animation:rise .6s var(--ease-out) backwards}
+.enter .panel:nth-child(2){animation-delay:.07s}.enter .panel:nth-child(3){animation-delay:.14s}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.12);opacity:1}100%{transform:scale(1)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
 /* Schritt 1 */
-.start{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:28px;margin-top:24px}
-.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:22px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.start{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:24px;margin-top:28px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:24px;display:flex;flex-direction:column;gap:16px;min-width:0;box-shadow:var(--sh-1)}
 .fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.fld{display:flex;flex-direction:column;gap:6px;min-width:0}
-.fld input{height:48px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
-.fld input:focus{outline:2px solid var(--red);outline-offset:1px}
+.fld{display:flex;flex-direction:column;gap:7px;min-width:0}
+.fld input{height:50px;padding:0 14px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface-2);transition:border-color .2s,box-shadow .2s,background .2s}
+.fld input:hover{border-color:var(--line-2)}
+.fld input:focus{outline:none;border-color:var(--red);background:var(--surface);box-shadow:0 0 0 4px rgba(227,0,27,.12)}
 .actions{display:flex;gap:12px;flex-wrap:wrap}
-.btn{min-height:52px;padding:0 22px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:10px;font-size:16px}
+.btn{position:relative;min-height:52px;padding:0 22px;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--surface);font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:10px;font-size:16px;transition:transform .15s var(--ease),box-shadow .2s var(--ease),background .2s,border-color .2s,color .2s;-webkit-user-select:none;user-select:none}
+.btn:hover:not(:disabled){border-color:var(--line-2);box-shadow:var(--sh-1)}
+.btn:active:not(:disabled){transform:scale(.97)}
 .btn:focus-visible{outline:2px solid var(--red);outline-offset:2px}
-.btn.primary{background:var(--red);border-color:var(--red);color:#fff}
-.btn.primary:disabled{background:var(--line);border-color:var(--line);color:var(--muted);cursor:not-allowed}
+.btn.primary{background:linear-gradient(180deg,var(--red-hi),var(--red));border-color:var(--red);color:#fff;box-shadow:var(--sh-red)}
+.btn.primary:hover:not(:disabled){box-shadow:0 8px 26px rgba(227,0,27,.36)}
+.btn.primary:disabled{background:var(--line);border-color:var(--line);color:var(--muted);cursor:not-allowed;box-shadow:none}
 .btn.dark{background:var(--ink);border-color:var(--ink);color:var(--surface)}
 .btn.small{min-height:42px;padding:0 14px;font-size:15px}
 .btn.block{width:100%}
+.btn .arrow{transition:transform .2s var(--ease)}
+.btn:hover:not(:disabled) .arrow{transform:translateX(3px)}
 .file{position:relative;overflow:hidden}
 .file input{position:absolute;inset:0;opacity:0;cursor:pointer}
-.law{display:flex;flex-direction:column;gap:14px}
-.law li{display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start}
-.law ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
-.law .n{font-family:var(--f-mono);font-size:12px;color:var(--red-ink);padding-top:2px}
-.law p{font-size:15px}
-.law small{display:block;color:var(--muted);font-size:13px;margin-top:2px}
-.note{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
+.law{display:flex;flex-direction:column;gap:14px;background:linear-gradient(160deg,#141113,#0b0a0b);color:#EDE9EA;border-color:#1f1b1d;position:relative;overflow:hidden}
+.law::after{content:"";position:absolute;width:340px;height:340px;right:-140px;top:-160px;border-radius:50%;background:radial-gradient(circle,rgba(227,0,27,.35),transparent 65%);pointer-events:none}
+.law h2{color:#fff}
+.law li{display:grid;grid-template-columns:34px 1fr;gap:10px;align-items:start}
+.law ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:16px;position:relative;z-index:1}
+.law .n{font-family:var(--f-mono);font-size:12px;color:#fff;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.04)}
+.law p{font-size:15px;font-weight:500}
+.law small{display:block;color:#A79FA2;font-size:13px;margin-top:3px;font-weight:400}
+.note{font-size:13px;color:#A79FA2;border-top:1px solid rgba(255,255,255,.1);padding-top:14px;position:relative;z-index:1}
 
 /* Arbeitsfläche */
-.work{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;margin-top:20px;align-items:start}
-.viewer{display:flex;flex-direction:column;gap:18px;min-width:0}
-.page{position:relative;width:100%;background:var(--paper);box-shadow:0 1px 2px rgba(0,0,0,.08),0 8px 24px rgba(0,0,0,.08);border-radius:2px;overflow:hidden}
-.page canvas{position:absolute;inset:0;display:block;width:100%;height:100%}
+.work{display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:24px;margin-top:22px;align-items:start}
+.viewer{display:flex;flex-direction:column;gap:20px;min-width:0}
+.page{position:relative;width:100%;background:var(--paper);box-shadow:0 1px 2px rgba(0,0,0,.06),0 10px 30px rgba(22,19,26,.10);border-radius:4px;overflow:hidden}
+.page canvas{position:absolute;inset:0;display:block;width:100%;height:100%;animation:fadeIn .35s ease both}
 .page.placing{cursor:crosshair;outline:3px dashed var(--red);outline-offset:4px}
-.pageno{position:absolute;top:8px;right:8px;font-family:var(--f-mono);font-size:11px;background:rgba(14,12,13,.75);color:#fff;padding:2px 6px;border-radius:4px}
-.sigfield{position:absolute;border:2px dashed var(--red);background:rgba(227,0,27,.07);border-radius:4px;display:flex;align-items:flex-end;justify-content:flex-start;color:#B30016;font-size:12px;font-weight:600;padding:3px 6px;cursor:default}
-.sigfield.vk{border-color:#3B5BA9;background:rgba(59,91,169,.07);color:#2A4486}
-.sigfield.tap{cursor:pointer;animation:pulse 1.8s ease-in-out infinite}
-.sigfield.signed{border-style:solid;border-color:#1E7A4C;background:rgba(30,122,76,.06);color:#1E7A4C;animation:none}
+.pageno{position:absolute;top:10px;right:10px;font-family:var(--f-mono);font-size:11px;background:rgba(14,12,13,.72);color:#fff;padding:3px 8px;border-radius:999px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);z-index:2}
+.sigfield{position:absolute;border:2px dashed var(--red);background:rgba(227,0,27,.06);border-radius:6px;display:flex;align-items:flex-end;justify-content:flex-start;color:#B30016;font-size:12px;font-weight:600;padding:3px 6px;cursor:default;transition:background .25s,border-color .25s,opacity .25s,box-shadow .25s}
+.sigfield.vk{border-color:#3B5BA9;background:rgba(59,91,169,.06);color:#2A4486}
+.sigfield.tap{cursor:pointer;animation:glow 2s var(--ease) infinite}
+.sigfield.vk.tap{animation-name:glowVk}
+.sigfield.wait{opacity:.38;border-style:dotted;cursor:default}
+.sigfield.signed{border-style:solid;border-color:rgba(30,122,76,.55);background:rgba(30,122,76,.05);color:#1E7A4C;animation:none}
 .sigfield img{position:absolute;inset:4px 4px 16px;width:calc(100% - 8px);height:calc(100% - 20px);object-fit:contain}
+.sigfield.fresh img{animation:ink 1s var(--ease-out) backwards}
+.sigfield.fresh span{animation:pop .5s var(--ease-out) .6s backwards}
+@keyframes ink{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
 .sigfield .x{position:absolute;top:-14px;right:-14px;width:30px;height:30px;border-radius:50%;border:0;background:var(--ink);color:var(--surface);font-size:16px;cursor:pointer;display:grid;place-items:center}
-@keyframes pulse{50%{background:rgba(227,0,27,.18)}}
-@media (prefers-reduced-motion:reduce){.sigfield.tap{animation:none}}
+@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(227,0,27,.0);background:rgba(227,0,27,.06)}50%{box-shadow:0 0 0 6px rgba(227,0,27,.14);background:rgba(227,0,27,.14)}}
+@keyframes glowVk{0%,100%{box-shadow:0 0 0 0 rgba(59,91,169,0);background:rgba(59,91,169,.06)}50%{box-shadow:0 0 0 6px rgba(59,91,169,.16);background:rgba(59,91,169,.15)}}
 
-.side{position:sticky;top:calc(env(safe-area-inset-top,0px) + 84px);display:flex;flex-direction:column;gap:16px;min-width:0}
-.side{max-height:calc(100vh - env(safe-area-inset-top,0px) - 100px);max-height:calc(100dvh - env(safe-area-inset-top,0px) - 100px);overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.side{position:sticky;top:calc(env(safe-area-inset-top,0px) + var(--head) + 16px);display:flex;flex-direction:column;gap:16px;min-width:0}
+.side{max-height:calc(100vh - env(safe-area-inset-top,0px) - var(--head) - 32px);max-height:calc(100dvh - env(safe-area-inset-top,0px) - var(--head) - 32px);overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:4px;scrollbar-width:thin}
 .side > *{flex:none}
 .rs{position:absolute;right:-13px;bottom:-13px;width:26px;height:26px;border-radius:50%;background:var(--red);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3);cursor:nwse-resize;touch-action:none;z-index:3;padding:0}
 .grip{position:absolute;left:0;top:-32px;width:26px;height:30px;border-radius:6px;border:0;background:var(--ink);color:var(--surface);display:grid;place-items:center;cursor:move;touch-action:none;font-size:13px;z-index:3;padding:0}
 .drag{cursor:move;touch-action:none}
-.dragging{opacity:.75;outline:2px solid var(--red)}
+.dragging{opacity:.8;outline:2px solid var(--red);box-shadow:var(--sh-2)}
 .txtfield .x,.chkfield .x{top:-32px;right:auto;left:32px;width:26px;height:26px}
 .chkfield .x{left:0}
 .side .list{flex:none}
-#toSign,#finish{position:sticky;bottom:0;flex:none;box-shadow:0 -8px 12px var(--surface)}
-.hash{font-family:var(--f-mono);font-size:13px;word-break:break-all;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-variant-numeric:tabular-nums}
+#toSign,#finish,#handBtn{position:sticky;bottom:0;flex:none;box-shadow:0 -12px 14px var(--surface),0 26px 0 2px var(--surface),var(--sh-red)}
+#toSign:disabled,#finish:disabled,#handBtn:disabled{box-shadow:0 -12px 14px var(--surface),0 26px 0 2px var(--surface)}
+.hash{font-family:var(--f-mono);font-size:13px;word-break:break-all;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-variant-numeric:tabular-nums}
 .list{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
-.list li{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:15px}
-.dot{width:10px;height:10px;border-radius:50%;background:var(--red)}
-.dot.vk{background:#3B5BA9}
-.pill{font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--red-soft);color:var(--red-ink);white-space:nowrap}
+.list li{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px;background:var(--surface);transition:border-color .2s,background .2s,transform .15s}
+.list li:hover{border-color:var(--line-2)}
+.list li:active{transform:scale(.99)}
+.list li.wait{opacity:.5}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--red);box-shadow:0 0 0 3px rgba(227,0,27,.12)}
+.dot.vk{background:#3B5BA9;box-shadow:0 0 0 3px rgba(59,91,169,.14)}
+.pill{font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;background:var(--red-soft);color:var(--red-ink);white-space:nowrap}
 .pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.ok::before{content:"✓ "}
+.pill.mute{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
 .hint{font-size:14px;color:var(--muted)}
-.empty{font-size:14px;color:var(--muted);padding:12px;border:1px dashed var(--line);border-radius:8px;text-align:center}
+.empty{font-size:14px;color:var(--muted);padding:14px;border:1px dashed var(--line-2);border-radius:var(--r-sm);text-align:center}
 .toggle{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .toggle .btn{min-width:0}
 .txtfield,.chkfield{position:absolute;border:1.5px dashed #3B5BA9;background:rgba(59,91,169,.08);border-radius:3px;display:flex;align-items:center;color:#14306E;font-family:Helvetica,Arial,sans-serif;line-height:1;overflow:visible}
@@ -137,74 +187,166 @@ p{margin:0}
 .chkfield{justify-content:center;font-weight:700;cursor:pointer}
 .txtfield .x,.chkfield .x{position:absolute;top:-13px;right:-13px;width:26px;height:26px;border-radius:50%;border:0;background:var(--ink);color:var(--surface);font-size:14px;cursor:pointer;display:grid;place-items:center;z-index:2}
 .step2-only{display:contents}
-.dot.tx{background:#14306E;border-radius:2px}
+.dot.tx{background:#14306E;border-radius:2px;box-shadow:none}
 .docs{display:flex;flex-direction:column;gap:10px}
-.docrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:8px}
+.docrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;padding:14px 16px;border:1px dashed var(--line-2);border-radius:var(--r-sm);background:var(--surface-2);transition:border-color .25s,background .25s}
 .docrow .hint{grid-column:1;min-width:0;overflow-wrap:anywhere}
 .docrow .btn{grid-column:2;grid-row:1/span 2}
-.docrow.ok{border-color:var(--ok);background:var(--ok-soft)}
+.docrow.ok{border-style:solid;border-color:color-mix(in srgb,var(--ok) 45%,transparent);background:var(--ok-soft)}
 .docrow.ok .hint{color:var(--ok)}
 .txtfield.opt{border-style:dotted;background:rgba(59,91,169,.04)}
 .btn.on{outline:3px solid var(--red);outline-offset:1px}
+.toast.busy::after{content:"";display:inline-block;width:12px;height:12px;margin-left:8px;vertical-align:-1px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.who{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--r-sm);background:var(--surface-2);border:1px solid var(--line)}
+.who .av{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-family:var(--f-display);font-weight:700;font-size:16px;color:#fff;background:#3B5BA9;flex:none}
+.who.kd .av{background:var(--red)}
+.who b{display:block;font-size:15px}
+.who small{color:var(--muted);font-size:13px}
 
 /* Abschluss */
 .kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 14px;font-size:15px;margin:0}
 .kv dt{color:var(--muted)}
 .kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .mail{display:flex;flex-direction:column;gap:10px}
-.mail pre{white-space:pre-wrap;font-family:var(--f-body);font-size:14px;margin:0;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:12px}
-.toast{font-size:14px;padding:10px 12px;border-radius:8px;background:var(--ok-soft);color:var(--ok)}
+.toast{font-size:14px;padding:10px 12px;border-radius:var(--r-sm);background:var(--ok-soft);color:var(--ok);animation:rise .35s var(--ease-out) backwards}
 .toast.err{background:var(--red-soft);color:var(--red-ink)}
+.done-hero{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.done-hero svg{width:72px;height:72px;flex:none}
+.done-hero .c{fill:none;stroke:var(--ok);stroke-width:3;stroke-dasharray:166;stroke-dashoffset:166;animation:draw .7s var(--ease-out) .1s forwards}
+.done-hero .k{fill:none;stroke:var(--ok);stroke-width:4;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:48;stroke-dashoffset:48;animation:draw .45s var(--ease-out) .7s forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+.track{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:0}
+.track li{position:relative;display:grid;grid-template-columns:30px 1fr;gap:12px;padding:8px 0;align-items:start}
+.track li:not(:last-child)::after{content:"";position:absolute;left:14px;top:38px;bottom:-6px;width:2px;background:var(--line);transition:background .4s}
+.track li.ok:not(:last-child)::after{background:var(--ok)}
+.track .ic{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;border:2px solid var(--line-2);background:var(--surface);font-size:14px;color:var(--muted);transition:all .35s var(--ease)}
+.track li.run .ic{border-color:var(--red);border-right-color:transparent;animation:spin .9s linear infinite}
+.track li.ok .ic{border-color:var(--ok);background:var(--ok);color:#fff;animation:pop .45s var(--ease-out)}
+.track li.ok .ic::before{content:"✓"}
+.track li.err .ic{border-color:var(--red);background:var(--red);color:#fff}
+.track li.err .ic::before{content:"!"}
+.track b{display:block;font-size:15px}
+.track small{display:block;color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.track li.err small{color:var(--red-ink)}
+.seal{display:none;align-items:center;gap:14px;padding:14px;border-radius:var(--r-sm);background:linear-gradient(135deg,#141113,#24060b);color:#fff}
+.seal.on{display:flex;animation:stamp .6s var(--ease-out) backwards}
+.seal svg{width:46px;height:46px;flex:none}
+.seal .ring{transform-box:fill-box;transform-origin:center;animation:spin 14s linear infinite}
+.seal b{display:block;font-family:var(--f-display);letter-spacing:.06em;text-transform:uppercase;font-size:17px}
+.seal small{color:#C9C1C4;font-size:12px;font-family:var(--f-mono)}
+@keyframes stamp{0%{opacity:0;transform:scale(1.25) rotate(-4deg)}70%{opacity:1;transform:scale(.97)}100%{transform:none}}
 
 /* Unterschrift-Overlay */
-.pad{position:fixed;inset:0;z-index:20;background:rgba(8,7,7,.72);display:grid;place-items:center;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
-.pad-card{width:min(920px,100%);background:var(--surface);border-radius:14px;padding:22px;display:flex;flex-direction:column;gap:14px;max-height:100%;overflow:auto}
+.pad{position:fixed;inset:0;z-index:20;background:rgba(8,7,7,.6);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:grid;place-items:center;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));animation:fadeIn .25s ease both}
+.pad-card{width:min(920px,100%);background:var(--surface);border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:14px;max-height:100%;overflow:auto;box-shadow:0 30px 80px rgba(0,0,0,.4);animation:sheet .45s var(--ease-out) backwards}
+@keyframes sheet{from{opacity:0;transform:translateY(40px) scale(.98)}to{opacity:1;transform:none}}
 .pad-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
-.pad-head p{color:var(--muted);font-size:15px}
-.canvas-wrap{position:relative;background:var(--paper);border:1px solid var(--line);border-radius:10px;aspect-ratio:3/1;max-width:100%}
-.canvas-wrap canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;border-radius:10px}
+.pad-head p{color:var(--muted);font-size:15px;margin-top:4px}
+.canvas-wrap{position:relative;background:var(--paper);border:1px solid var(--line);border-radius:14px;aspect-ratio:3/1;max-width:100%;box-shadow:inset 0 2px 10px rgba(0,0,0,.04)}
+.canvas-wrap canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;border-radius:14px}
 .baseline{position:absolute;left:6%;right:6%;bottom:24%;border-bottom:1.5px solid #B9B2B4;pointer-events:none}
 .baseline::before{content:"×";position:absolute;left:-4px;bottom:2px;color:#9B9396;font-size:20px}
-.consent{display:flex;gap:12px;align-items:flex-start;font-size:15px;padding:12px;border:1px solid var(--line);border-radius:8px;cursor:pointer}
+.baseline::after{content:"Hier unterschreiben";position:absolute;right:0;top:8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#B9B2B4}
+.consent{display:flex;gap:12px;align-items:flex-start;font-size:15px;padding:14px;border:1px solid var(--line);border-radius:var(--r-sm);cursor:pointer;background:var(--surface-2);transition:border-color .2s}
+.consent:has(input:checked){border-color:var(--ok)}
 .consent input{width:24px;height:24px;flex:none;accent-color:var(--red);margin-top:1px}
 .pad-foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center}
 .meta{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
 
+/* Übergabe Verkäufer → Kunde → Verkäufer */
+.hand{position:fixed;inset:0;z-index:30;background:#070606;color:#fff;display:grid;place-items:center;overflow:hidden;padding:max(24px,env(safe-area-inset-top,0px)) max(24px,env(safe-area-inset-right,0px)) max(24px,env(safe-area-inset-bottom,0px)) max(24px,env(safe-area-inset-left,0px));animation:fadeIn .4s ease both}
+.hand::before,.hand::after{content:"";position:absolute;border-radius:50%;filter:blur(10px);pointer-events:none}
+.hand::before{width:70vmax;height:70vmax;left:-25vmax;top:-30vmax;background:radial-gradient(circle,rgba(227,0,27,.32),transparent 60%);animation:drift 14s ease-in-out infinite alternate}
+.hand::after{width:60vmax;height:60vmax;right:-25vmax;bottom:-30vmax;background:radial-gradient(circle,rgba(227,0,27,.18),transparent 60%);animation:drift 18s ease-in-out infinite alternate-reverse}
+@keyframes drift{to{transform:translate(8vmax,6vmax) scale(1.1)}}
+.hand-in{position:relative;z-index:1;max-width:620px;width:100%;display:flex;flex-direction:column;align-items:center;text-align:center;gap:22px}
+.hand-in > *{animation:rise .7s var(--ease-out) backwards}
+.hand-in > *:nth-child(2){animation-delay:.08s}.hand-in > *:nth-child(3){animation-delay:.16s}.hand-in > *:nth-child(4){animation-delay:.24s}.hand-in > *:nth-child(5){animation-delay:.32s}.hand-in > *:nth-child(6){animation-delay:.4s}
+.hand img{width:200px;height:auto}
+.hand .tab{width:120px;height:120px;display:grid;place-items:center}
+.hand .tab svg{width:110px;height:110px;overflow:visible}
+.hand .tab .dev{animation:pass 2.6s var(--ease) infinite;transform-origin:50% 50%;transform-box:fill-box}
+@keyframes pass{0%,15%{transform:translateX(-14px) rotate(-6deg)}50%,65%{transform:translateX(14px) rotate(6deg)}100%{transform:translateX(-14px) rotate(-6deg)}}
+.hand h2{font-size:clamp(34px,6vw,56px);color:#fff;letter-spacing:.01em}
+.hand h2 .acc{color:var(--red-hi)}
+.hand p{color:#C9C1C4;font-size:18px;max-width:46ch}
+.hand .who{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.1);color:#fff;text-align:left}
+.hand .who small{color:#A79FA2}
+.hand .btn.primary{min-height:60px;font-size:18px;padding:0 34px;border-radius:999px}
+.hand .btn.ghost{background:transparent;color:#C9C1C4;border-color:rgba(255,255,255,.18);border-radius:999px}
+.hold{position:relative;overflow:hidden}
+.hold .fill{position:absolute;inset:0;background:rgba(255,255,255,.22);transform-origin:left;transform:scaleX(0);pointer-events:none}
+.hold.go .fill{transform:scaleX(1);transition:transform 1.1s linear}
+.hold span{position:relative}
+
 /* Login, Benutzerleiste, Archiv */
 .user{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--bar-muted)}
 .user b{color:var(--bar-fg);font-weight:600}
-.barbtn{border:1px solid #3a3335;background:transparent;color:var(--bar-fg);border-radius:999px;padding:7px 14px;font-size:14px;font-weight:500;cursor:pointer}
+.barbtn{border:1px solid #2e292b;background:transparent;color:var(--bar-fg);border-radius:999px;padding:8px 15px;font-size:14px;font-weight:500;cursor:pointer;transition:background .2s,border-color .2s}
+.barbtn:hover{background:#1d191b}
 .barbtn[aria-current="page"]{background:var(--red);border-color:var(--red)}
-.auth{max-width:440px;margin:6vh auto 0}
-.auth .panel{gap:14px}
-.auth .fld input{width:100%;box-sizing:border-box}
+.av-sm{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--red);color:#fff;font-family:var(--f-display);font-weight:700;font-size:13px}
+body.authing{background:#070606}
+body.authing .bar{display:none}
+body.authing main{max-width:none;padding:0}
+.authwrap{position:relative;min-height:100vh;min-height:100dvh;display:grid;place-items:center;overflow:hidden;padding:24px 16px;background:#070606;color:#fff}
+.authwrap::before{content:"";position:absolute;inset:-20%;background:radial-gradient(40vmax 40vmax at 15% 20%,rgba(227,0,27,.35),transparent 60%),radial-gradient(35vmax 35vmax at 90% 85%,rgba(227,0,27,.2),transparent 60%);animation:drift 16s ease-in-out infinite alternate}
+.authwrap::after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:48px 48px;-webkit-mask-image:radial-gradient(circle at 50% 40%,#000,transparent 75%);mask-image:radial-gradient(circle at 50% 40%,#000,transparent 75%);animation:gridMove 20s linear infinite}
+@keyframes gridMove{to{background-position:48px 48px,48px 48px}}
+.auth{position:relative;z-index:1;width:100%;max-width:440px;display:flex;flex-direction:column;align-items:center;gap:26px}
+.auth > img{width:220px;height:auto;animation:logoIn .9s var(--ease-out) backwards}
+.auth .panel{width:100%;box-sizing:border-box;gap:14px;background:rgba(26,23,24,.72);-webkit-backdrop-filter:blur(18px) saturate(1.3);backdrop-filter:blur(18px) saturate(1.3);border:1px solid rgba(255,255,255,.08);box-shadow:0 30px 80px rgba(0,0,0,.5);color:#F3EFF0;animation:rise .8s var(--ease-out) .15s backwards;border-radius:20px;padding:28px}
+.auth .panel h1{font-size:40px;color:#fff}
+.auth .hint{color:#A79FA2}
+.auth .label{color:#A79FA2}
+.auth .fld input{width:100%;box-sizing:border-box;background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.1);color:#fff}
+.auth .fld input::placeholder{color:#6f6769}
+.auth .fld input:focus{background:rgba(255,255,255,.08)}
+.auth .linkbtn{color:#FF6474}
+.auth .foot{font-size:12px;color:#6f6769;letter-spacing:.08em;text-transform:uppercase;font-family:var(--f-mono)}
 .linkbtn{border:0;background:none;color:var(--red-ink);font-weight:600;cursor:pointer;padding:0;font-size:15px;text-decoration:underline;text-underline-offset:3px}
 .fld input[readonly]{color:var(--muted)}
 .arch{display:flex;flex-direction:column;gap:10px;margin-top:20px}
-.arch-row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
+.arch-row{display:grid;grid-template-columns:44px minmax(0,1.3fr) minmax(0,1fr) auto auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;box-shadow:var(--sh-1);transition:transform .2s var(--ease),box-shadow .2s,border-color .2s}
+.arch-row:hover{transform:translateY(-1px);box-shadow:var(--sh-2);border-color:var(--line-2)}
+.arch-row .av{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--surface-2);border:1px solid var(--line);font-family:var(--f-display);font-weight:700;font-size:17px}
 .arch-row b{display:block;font-weight:600}
 .arch-row small{color:var(--muted);font-size:13px}
-.arch-tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:16px}
-.arch-tools input{height:44px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:var(--surface);min-width:0;flex:1;max-width:360px}
-@media (max-width:700px){.arch-row{grid-template-columns:minmax(0,1fr) auto}.arch-row .seller{display:none}}
+.arch-tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:18px}
+.arch-tools input{height:46px;padding:0 14px 0 40px;border:1px solid var(--line);border-radius:999px;background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%238e8689' stroke-width='2'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='m11 11 4 4'/%3E%3C/svg%3E") no-repeat 15px 50%;min-width:0;flex:1;max-width:380px;transition:border-color .2s,box-shadow .2s}
+.arch-tools input:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 4px rgba(227,0,27,.12)}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:20px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;box-shadow:var(--sh-1)}
+.stat b{display:block;font-family:var(--f-display);font-size:34px;line-height:1;font-weight:700}
+.stat small{color:var(--muted);font-size:13px}
+.stat.acc b{color:var(--red)}
+@media (max-width:700px){.arch-row{grid-template-columns:44px minmax(0,1fr) auto}.arch-row .seller,.arch-row .pill{display:none}}
 
 @media (max-width:900px){
+  #handBtn:not([hidden]):not(:disabled),#finish:not([hidden]):not(:disabled){position:fixed;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));bottom:max(16px,env(safe-area-inset-bottom,0px));width:auto;z-index:15;min-height:60px;border-radius:999px;box-shadow:0 10px 30px rgba(227,0,27,.4);animation:rise .45s var(--ease-out) backwards}
   .start,.work{grid-template-columns:minmax(0,1fr)}
   .side{position:static;order:-1;max-height:none;overflow:visible}
-  .steps{margin-left:0;width:100%}
+  .steps{margin-left:0;width:100%;justify-content:space-between;order:2}
+  .user{margin-left:auto;order:1}
+  .user > span:not(.av-sm){display:none}
   .step span{display:none}
+  .brand em{display:none}
 }
-@media (max-width:520px){.fields{grid-template-columns:1fr}}
+@media (max-width:520px){.fields{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}}
+body.customer .steps,body.customer .user{visibility:hidden}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style>
 
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 </head>
-<body>
+<body class="authing">
+<div class="splash" id="splash" aria-hidden="true"><div class="splash-in"><img src="logo-white.webp" alt=""><div class="sweep"></div></div></div>
 <header class="bar">
   <div class="bar-in gutter">
-    <div class="brand"><b>Autowelt-<span>Prusseit</span></b><em>Sign</em></div>
-    <span class="proto">BETA</span>
+    <div class="brand"><img src="logo-white.webp" alt="Autowelt Prusseit" width="126" height="36"><em>Sign</em></div>
     <nav class="steps" aria-label="Ablauf">
+      <span class="step-ind" aria-hidden="true"></span>
       <button class="step" data-go="1" id="nav1"><i>1</i><span>Vertrag</span></button>
       <button class="step" data-go="2" id="nav2" disabled><i>2</i><span>Felder</span></button>
       <button class="step" data-go="3" id="nav3" disabled><i>3</i><span>Unterschrift</span></button>
@@ -212,7 +354,7 @@ p{margin:0}
     </nav>
     <div class="user" id="userBar" hidden>
       <button class="barbtn" id="navArch">Archiv</button>
-      <span><b id="userName"></b></span>
+      <span class="av-sm" id="userAv" aria-hidden="true"></span><span><b id="userName"></b></span>
       <button class="barbtn" id="logout">Abmelden</button>
     </div>
   </div>
@@ -221,7 +363,8 @@ p{margin:0}
 <main class="gutter">
   <!-- 0 Anmeldung -->
   <section id="s0" hidden>
-    <div class="auth">
+    <div class="authwrap"><div class="auth">
+      <img src="logo-white.webp" alt="Autowelt Prusseit" width="220" height="63">
       <div class="panel">
         <h1 id="authTitle">Anmelden</h1>
         <p class="hint" id="authLede">Mit deiner Firmen-E-Mail und deinem Passwort.</p>
@@ -232,13 +375,16 @@ p{margin:0}
         <p class="toast err" id="authErr" hidden></p>
         <p class="hint"><span id="authSwitchTx">Noch kein Konto?</span> <button class="linkbtn" id="authSwitch">Registrieren</button></p>
       </div>
-    </div>
+      <p class="foot">Prusseit Sign · Elektronische Vertragsunterzeichnung</p>
+    </div></div>
   </section>
 
   <!-- Archiv -->
   <section id="sA" hidden>
+    <p class="eyebrow">Übersicht</p>
     <h1>Archiv</h1>
     <p class="lede" id="archLede">Alle abgeschlossenen und offenen Vorgänge.</p>
+    <div class="stats" id="archStats"></div>
     <div class="arch-tools">
       <input id="archQ" type="search" placeholder="Kunde, Vorgang oder Fahrzeug suchen">
       <button class="btn small" id="archBack">Neuer Vorgang</button>
@@ -250,8 +396,9 @@ p{margin:0}
 
   <!-- 1 Vertrag -->
   <section id="s1" hidden>
-    <h1>Kaufvertrag unterschreiben lassen</h1>
-    <p class="lede">Vorgang anlegen, Vertrag laden, Kunde unterschreibt mit Finger oder Pencil. Am Ende entsteht ein PDF mit Prüfprotokoll.</p>
+    <p class="eyebrow">Neuer Vorgang</p>
+    <h1>Kaufvertrag <span class="acc">unterschreiben</span> lassen</h1>
+    <p class="lede">Vorgang anlegen, Vertrag laden, erst du, dann der Kunde unterschreibt mit Finger oder Pencil. Am Ende entsteht ein versiegeltes PDF mit Prüfprotokoll.</p>
     <div class="start">
       <div class="panel">
         <h2>Vorgang</h2>
@@ -268,7 +415,7 @@ p{margin:0}
           <ul class="list" id="attList"></ul>
         </div>
         <div class="actions">
-          <button class="btn primary" id="startDeal" disabled>Weiter zu den Feldern</button>
+          <button class="btn primary" id="startDeal" disabled>Weiter zu den Feldern <span class="arrow">→</span></button>
           <button class="btn" id="loadSample">Beispiel zum Testen</button>
         </div>
         <p class="toast err" id="loadErr" hidden></p>
@@ -279,15 +426,17 @@ p{margin:0}
           <li><span class="n">01</span><p>Fingerabdruck des Dokuments<small>SHA-256 vor der Unterschrift. Der Kunde sieht, was er unterschreibt.</small></p></li>
           <li><span class="n">02</span><p>Schreibdynamik wird erfasst<small>Strich für Strich mit Zeit und Druck (Apple Pencil). Daraus entsteht ein eigener Hash.</small></p></li>
           <li><span class="n">03</span><p>Dokument wird gesperrt<small>Ab der ersten Unterschrift lassen sich Felder nicht mehr ändern.</small></p></li>
-          <li><span class="n">04</span><p>Prüfprotokoll im PDF<small>Zeit, Zeitzone, Gerät, Verkäufer, beide Hashes – als letzte Seite angehängt.</small></p></li>
+          <li><span class="n">04</span><p>Prüfprotokoll im PDF<small>Zeit, Zeitzone, Gerät, Verkäufer, beide Hashes, als letzte Seiten angehängt.</small></p></li>
+          <li><span class="n">05</span><p>Siegel mit Zeitstempel<small>Firmensiegel der Autowelt Prusseit GmbH und Zeitstempel von DigiCert. Jede spätere Änderung fällt auf.</small></p></li>
         </ol>
-        <p class="note">Gilt für formfreie Verträge wie den Fahrzeugkauf. Original, Unterschriften und Prüfprotokoll werden im Archiv gespeichert. Zertifikatssiegel mit Zeitstempel und Mailversand folgen in der nächsten Ausbaustufe.</p>
+        <p class="note">Gilt für formfreie Verträge wie den Fahrzeugkauf. Original, Unterschriften und Prüfprotokoll werden im Archiv gespeichert, der Kunde bekommt das versiegelte PDF per E-Mail.</p>
       </aside>
     </div>
   </section>
 
   <!-- 2 + 3 Arbeitsfläche -->
   <section id="s2" hidden>
+    <p class="eyebrow" id="workEyebrow">Schritt 2 von 4</p>
     <h1 id="workTitle">Felder setzen und ausfüllen</h1>
     <div class="work">
       <div class="viewer" id="viewer"></div>
@@ -306,14 +455,16 @@ p{margin:0}
           <button class="btn primary block" id="toSign">Weiter zur Unterschrift</button>
         </div>
         <div class="panel" id="signPanel" hidden>
-          <h3>Sie unterschreiben dieses Dokument</h3>
+          <h3 id="signHead">Sie unterschreiben dieses Dokument</h3>
+          <div class="who" id="signWho"><span class="av" id="signAv"></span><span><b id="signName"></b><small id="signRole"></small></span></div>
           <div>
-            <p class="label" style="margin-bottom:6px">Fingerabdruck (SHA-256)</p>
+            <p class="label" style="margin-bottom:6px">Fingerabdruck des Dokuments (SHA-256)</p>
             <div class="hash" id="origHash"></div>
           </div>
           <ul class="list" id="signList"></ul>
           <p class="hint" id="lockHint">Tippen Sie auf ein markiertes Feld im Dokument.</p>
-          <button class="btn primary block" id="finish" disabled>Vertrag abschließen</button>
+          <button class="btn primary block" id="handBtn" disabled>iPad an den Kunden übergeben <span class="arrow">→</span></button>
+          <button class="btn primary block" id="finish" disabled hidden>Fertig</button>
         </div>
       </aside>
     </div>
@@ -321,17 +472,28 @@ p{margin:0}
 
   <!-- 4 Abschluss -->
   <section id="s4" hidden>
-    <h1>Vertrag unterschrieben</h1>
+    <div class="done-hero">
+      <svg viewBox="0 0 56 56" aria-hidden="true"><circle class="c" cx="28" cy="28" r="26"/><path class="k" d="M16 29l8 8 16-17"/></svg>
+      <div><p class="eyebrow">Abgeschlossen</p><h1>Vertrag unterschrieben</h1></div>
+    </div>
     <p class="lede" id="doneLede"></p>
     <div class="work">
       <div class="viewer" id="finalViewer"></div>
       <aside class="side">
         <div class="panel">
+          <h3>Status</h3>
+          <ol class="track" id="track">
+            <li id="tSave"><span class="ic"></span><span><b>Im Archiv gespeichert</b><small>Wartet …</small></span></li>
+            <li id="tSeal"><span class="ic"></span><span><b>Versiegelt mit Zeitstempel</b><small>Wartet …</small></span></li>
+            <li id="tMail"><span class="ic"></span><span><b>An den Kunden verschickt</b><small>Wartet …</small></span></li>
+          </ol>
+          <div class="seal" id="sealBadge"><svg viewBox="0 0 48 48" aria-hidden="true"><circle class="ring" cx="24" cy="24" r="21" fill="none" stroke="#E3001B" stroke-width="2" stroke-dasharray="3 3"/><circle cx="24" cy="24" r="15" fill="#E3001B"/><path d="M17 24.5l4.5 4.5 9.5-10" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg><span><b>Versiegelt</b><small id="sealTx"></small></span></div>
+        </div>
+        <div class="panel">
           <h3>Ergebnis</h3>
           <dl class="kv" id="summary"></dl>
           <button class="btn primary block" id="savePdf">PDF speichern</button>
           <p class="toast" id="saveMsg" hidden></p>
-          <p class="toast" id="archMsg" hidden></p>
         </div>
         <div class="panel mail">
           <h3>Versand per E-Mail</h3>
@@ -367,6 +529,17 @@ p{margin:0}
   </div>
 </div>
 
+<div class="hand" id="hand" hidden role="dialog" aria-modal="true" aria-labelledby="handTitle">
+  <div class="hand-in">
+    <img src="logo-white.webp" alt="Autowelt Prusseit" width="200" height="57">
+    <div class="tab" aria-hidden="true"><svg viewBox="0 0 110 110"><g class="dev"><rect x="28" y="14" width="54" height="78" rx="9" fill="none" stroke="#fff" stroke-width="3"/><rect x="34" y="22" width="42" height="58" rx="3" fill="rgba(227,0,27,.25)"/><path d="M40 60c5-8 9 4 14-3s8 3 14-4" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><circle cx="55" cy="86" r="2.5" fill="#fff"/></g></svg></div>
+    <h2 id="handTitle"></h2>
+    <p id="handText"></p>
+    <div class="who kd" id="handWho"><span class="av" id="handAv"></span><span><b id="handName"></b><small id="handRole"></small></span></div>
+    <div class="actions" style="justify-content:center"><button class="btn ghost" id="handBack" hidden>Zurück</button><button class="btn primary hold" id="handGo"><span class="fill"></span><span id="handGoTx"></span></button></div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -395,7 +568,16 @@ const winAnsi = s => String(s).replace(/[^\x20-\x7E\xA0-\xFF–—‘’“”�
 const nameFor = role => role==="kd" ? S.meta.kunde : S.meta.verkaeufer;
 
 /* ---------- Schritte ---------- */
-function go(n){
+const initials = n => (n||"?").split(/[\s.@]+/).filter(Boolean).slice(0,2).map(w => w[0].toUpperCase()).join("");
+function animate(el){ if (!el) return; el.classList.remove("enter"); void el.offsetWidth; el.classList.add("enter"); }
+function moveInd(){
+  const b = document.querySelector('.step[aria-current="step"]'), ind = document.querySelector(".step-ind");
+  if (!ind) return; if (!b || !b.offsetWidth){ ind.style.width = "0"; return; }
+  ind.style.width = b.offsetWidth + "px"; ind.style.transform = "translateX(" + b.offsetLeft + "px)";
+}
+window.addEventListener("resize", moveInd);
+function go(n, force){
+  const prev = S.step, wasHidden = [$("#s1"),$("#s2"),$("#s4")].every(x => x.hidden);
   S.step = n; S.maxStep = Math.max(S.maxStep, n);
   $("#s0").hidden = true; $("#sA").hidden = true; $("#navArch").removeAttribute("aria-current"); document.querySelector(".steps").hidden = false;
   $("#s1").hidden = n!==1; $("#s2").hidden = !(n===2||n===3); $("#s4").hidden = n!==4;
@@ -409,12 +591,16 @@ function go(n){
     if (S.final && i!==4) ok = false;
     b.disabled = !ok || i===n;
   }
+  document.body.classList.toggle("customer", n===3 && S.phase==="kd");
   if (n===2||n===3){
-    $("#workTitle").textContent = n===2 ? "Felder setzen und ausfüllen" : "Bitte unterschreiben";
+    const kd = n===3 && S.phase==="kd";
+    $("#workEyebrow").textContent = n===2 ? "Schritt 2 von 4" : kd ? "Für " + S.meta.kunde : "Schritt 3 von 4 · Verkäufer";
+    $("#workTitle").textContent = n===2 ? "Felder setzen und ausfüllen" : kd ? "Bitte unterschreiben Sie" : "Deine Unterschrift";
     $("#editPanel").hidden = n!==2; $("#signPanel").hidden = n!==3;
     setPlacing(null); drawFields(); updateLists();
   }
-  window.scrollTo({top:0, behavior:"instant"});
+  if (n !== prev || force || wasHidden){ animate($(n===1 ? "#s1" : n===4 ? "#s4" : "#s2")); window.scrollTo({top:0, behavior:"instant"}); }
+  requestAnimationFrame(moveInd);
 }
 document.querySelectorAll(".step").forEach(b => b.addEventListener("click", () => go(+b.dataset.go)));
 
@@ -508,7 +694,7 @@ const isSig = f => !f.kind || f.kind === "sig";
 
 /* Unterschriftsstellen und Tabelle der vorvertraglichen Informationen im Kaufvertrag (DMS-Layout) erkennen */
 async function detectFields(bytes, pageCount){
-  const out = []; let pdf;
+  const out = []; let pdf; out.imagePages = [];
   try { pdf = await pdfjsLib.getDocument({ data: bytes.slice() }).promise; } catch { return out; }
   try {
     for (let i=1; i<=Math.min(pdf.numPages, pageCount); i++){
@@ -517,6 +703,7 @@ async function detectFields(bytes, pageCount){
       if (page.rotate % 360) continue;
       const items = (await page.getTextContent()).items.filter(it => it.str && it.str.trim())
         .map(it => ({ s:it.str.trim(), x:it.transform[4]-x0, y:it.transform[5]-y0, w:it.width, h:Math.abs(it.transform[3]) }));
+      if (items.filter(it => it.y > H*0.12 && it.y < H*0.85).length < 4) out.imagePages.push(i-1); // Seite ist ein Bild: später per Texterkennung lesen
       const sig = (role, x, yb, w, h) => {
         x = Math.max(4, Math.min(x, W-w-4));
         if (out.some(o => o.page===i-1 && Math.abs(o.x*W - x) < 20 && Math.abs((1-o.y)*H - (yb+h)) < 20)) return;
@@ -547,6 +734,42 @@ async function detectFields(bytes, pageCount){
   return out;
 }
 
+/* Bildseiten (z. B. Aufwandspauschale) per Texterkennung nach „Unterschrift Kunde/Verkäufer: ____“ durchsuchen */
+const TESS = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/";
+let tessLoad = null;
+const loadTess = () => tessLoad ||= new Promise((ok, fail) => { const sc = document.createElement("script"); sc.src = TESS + "tesseract.min.js"; sc.onload = ok; sc.onerror = () => { tessLoad = null; fail(new Error("Texterkennung nicht erreichbar")); }; document.head.appendChild(sc); });
+async function ocrFields(bytes, pageIdx){
+  if (!pageIdx.length) return [];
+  await loadTess();
+  const worker = await Tesseract.createWorker("deu", 1, { workerPath:TESS + "worker.min.js", corePath:"https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1", langPath:"https://cdn.jsdelivr.net/npm/@tesseract.js-data/deu@1.0.0/4.0.0_best_int" });
+  const pdf = await pdfjsLib.getDocument({ data: bytes.slice() }).promise, out = [];
+  try {
+    for (const pi of pageIdx){
+      const page = await pdf.getPage(pi + 1), sc = 1.5, vp = page.getViewport({ scale:sc });
+      const W = vp.width/sc, H = vp.height/sc;
+      const c = document.createElement("canvas"); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+      const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
+      await page.render({ canvasContext:g, viewport:vp }).promise;
+      const { data } = await worker.recognize(c);
+      c.width = c.height = 0;
+      for (const ln of data.lines || []){
+        const ws = ln.words;
+        for (let k = 0; k < ws.length - 1; k++){
+          if (!/^Unterschrift$/i.test(ws[k].text)) continue;
+          const r = ws[k+1], m = r.text.match(/^(Kunde|K[äa]ufer|Verk[äa]ufer|Verbraucher)/i); if (!m) continue;
+          const role = /^verk/i.test(m[1]) ? "vk" : "kd";
+          const u = /_{3,}/.test(r.text) ? r : (ws[k+2] && /^_{3,}/.test(ws[k+2].text) ? ws[k+2] : null);
+          const b = u || r, x = u ? Math.max(u.bbox.x0/sc, r.bbox.x1/sc + 8) : r.bbox.x1/sc + 8;
+          const w = Math.min(u ? Math.max(110, Math.min(u.bbox.x1/sc - x + 8, 220)) : 180, W - x - 4), h = 44, yb = H - b.bbox.y1/sc - 3;
+          if (out.some(o => o.page === pi && Math.abs(o.y*H - (H - yb - h)) < 20)) continue;
+          out.push({ id:"ocr" + pi + "_" + out.length, kind:"sig", role, sig:null, page:pi, x:x/W, y:(H - yb - h)/H, w:w/W, h:h/H, ocr:true });
+        }
+      }
+    }
+  } finally { pdf.destroy(); await worker.terminate(); }
+  return out;
+}
+
 async function loadDoc(bytes, fields, name, opt={}){
   const err = $("#loadErr"); err.hidden = true;
   S.formCount = 0; S.autoCount = { sig:0, text:0 };
@@ -556,6 +779,7 @@ async function loadDoc(bytes, fields, name, opt={}){
     if (!fields.length){
       fields = readFormFields(d); S.formCount = fields.length;
       const auto = await detectFields(opt.kvBytes || bytes, opt.kvPages || S.pageSizes.length);
+      S.imagePages = auto.imagePages;
       fields = fields.concat(auto);
       S.autoCount = { sig:auto.filter(isSig).length, text:auto.filter(f => f.kind==="text").length };
     }
@@ -575,6 +799,21 @@ async function loadDoc(bytes, fields, name, opt={}){
   if (info.length) fi.textContent = info.join(", ").replace(/, ([^,]*)$/, " und $1") + " automatisch gesetzt. Bitte prüfen, fehlende Felder ergänzen.";
   await renderDoc(bytes, $("#viewer"), true);
   drawFields();
+  if (S.imagePages?.length) runOcr(opt.kvBytes || bytes, S.imagePages, fi);
+}
+async function runOcr(bytes, pages, fi){
+  const deal = S.dealId, tb = $("#toSign");
+  S.ocrBusy = true; updateLists();
+  const base = fi.hidden ? "" : fi.textContent + " ";
+  fi.hidden = false; fi.classList.add("busy"); fi.textContent = base + (pages.length === 1 ? "Seite " + (pages[0]+1) + " ist ein Bild und" : "Seiten " + pages.map(p => p+1).join(", ") + " sind Bilder und") + " werden gerade gelesen …";
+  try {
+    const found = await (S.kvOcr && S.kvOcr.bytes === bytes ? S.kvOcr.run : ocrFields(bytes, pages));
+    if (S.dealId !== deal || S.locked) return;
+    const fresh = found.filter(f => !S.fields.some(g => isSig(g) && g.page === f.page && Math.abs(g.y - f.y) < 0.03));
+    S.fields.push(...fresh); drawFields();
+    fi.textContent = base + (fresh.length ? fresh.length + " weitere Unterschriftsfelder auf " + (pages.length === 1 ? "der Bildseite" : "den Bildseiten") + " erkannt (S. " + [...new Set(fresh.map(f => f.page+1))].join(", ") + ")." : "Auf den Bildseiten wurden keine Unterschriftsstellen gefunden.");
+  } catch(e){ console.error(e); if (S.dealId === deal) fi.textContent = base + "Bildseiten konnten nicht gelesen werden (" + (e.message||e) + "). Felder dort bitte von Hand setzen."; }
+  finally { if (S.dealId === deal){ S.ocrBusy = false; fi.classList.remove("busy"); updateLists(); } }
 }
 /* ---------- Archiv-Anbindung ---------- */
 async function audit(event, details={}){
@@ -610,8 +849,9 @@ async function recordSignature(f){
   if (error) throw error;
   await audit("signed", { field:f.id, role:f.role, name:f.sig.name, bio_sha256:f.sig.bioHash, strokes:f.sig.strokes, points:f.sig.points, input:f.sig.input, consent:f.sig.consent });
 }
+function trk(id, state, text){ const li = $("#" + id); li.className = state || ""; if (text != null) li.querySelector("small").textContent = text; }
 async function archiveFinal(){
-  const m = $("#archMsg"); m.hidden = false; m.classList.remove("err"); m.textContent = "Wird im Archiv gespeichert …";
+  trk("tSave", "run", "Wird gespeichert …");
   try {
     const path = S.dealId + "/final.pdf";
     const up = await sb.storage.from("contracts").upload(path, new Blob([S.final], {type:"application/pdf"}), { contentType:"application/pdf", upsert:false });
@@ -619,23 +859,25 @@ async function archiveFinal(){
     const { error } = await sb.from("deals").update({ final_path:path, final_sha256:S.finalHash, status:"signed", signed_at:new Date().toISOString() }).eq("id", S.dealId);
     if (error) throw error;
     await audit("completed", { final_sha256:S.finalHash, pages:S.pageSizes.length + (S.protoPages||1) });
-    m.textContent = "Im Archiv gespeichert. Wird versiegelt …";
-  } catch(e) { console.error(e); m.classList.add("err"); m.textContent = "Archivierung fehlgeschlagen: " + (e.message||e) + ". Bitte PDF zusätzlich speichern."; return; }
+    trk("tSave", "ok", "Original, Unterschriften und Protokoll gesichert.");
+  } catch(e) { console.error(e); trk("tSave", "err", "Fehlgeschlagen: " + (e.message||e) + ". Bitte PDF zusätzlich speichern."); trk("tSeal", "", "Übersprungen"); trk("tMail", "", "Übersprungen"); return; }
   await sealContract();
   sendContract(false);
 }
 /* Siegel + Zeitstempel (Edge Function seal-contract); bei Fehler geht das unversiegelte PDF raus */
 async function sealContract(){
-  const m = $("#archMsg");
+  trk("tSeal", "run", "Firmensiegel und Zeitstempel werden angebracht …");
   try {
     const { data, error } = await sb.functions.invoke("seal-contract", { body: { deal_id:S.dealId } });
     if (error){ let msg = error.message; try { msg = (await error.context.json()).error || msg; } catch {} throw new Error(msg); }
     const dl = await sb.storage.from("contracts").download(S.dealId + "/sealed.pdf");
     if (!dl.error) S.sealed = new Uint8Array(await dl.data.arrayBuffer());
-    m.textContent = data.timestamped ? "Im Archiv gespeichert, versiegelt und mit Zeitstempel versehen." : "Im Archiv gespeichert und versiegelt (ohne Zeitstempel, Dienst nicht erreichbar).";
+    trk("tSeal", "ok", data.timestamped ? "Autowelt Prusseit GmbH · Zeitstempel DigiCert" : "Versiegelt, ohne Zeitstempel (Dienst nicht erreichbar).");
+    $("#sealTx").textContent = fmtDT(new Date()) + (data.timestamped ? " · Zeitstempel DigiCert" : "");
+    $("#sealBadge").classList.add("on");
     const dd = [...$("#summary").querySelectorAll("dt")].find(d => d.textContent === "Siegel")?.nextElementSibling;
-    if (dd) dd.textContent = short(data.sealed_sha256) + (data.timestamped ? " · Zeitstempel" : "");
-  } catch(e){ console.error(e); m.classList.add("err"); m.textContent = "Im Archiv gespeichert, Versiegeln fehlgeschlagen: " + (e.message||e); }
+    if (dd) dd.textContent = short(data.sealed_sha256 || "") + (data.timestamped ? " · Zeitstempel" : "");
+  } catch(e){ console.error(e); trk("tSeal", "err", "Versiegeln fehlgeschlagen: " + (e.message||e) + ". Das unversiegelte PDF liegt im Archiv."); }
 }
 
 $("#loadSample").addEventListener("click", async () => { readMeta(); S.parts = null; const s = await makeSample(S.meta); loadDoc(s.bytes, s.fields, "Kaufvertrag_" + S.meta.vorgang + ".pdf"); });
@@ -666,6 +908,8 @@ $("#pdfIn").addEventListener("change", async e => {
   const err = $("#loadErr"); err.hidden = true;
   try { S.kv = await readPdf(file); } catch { err.textContent = pdfErr(file.name); err.hidden = false; }
   showDocs();
+  // Bildseiten schon jetzt im Hintergrund lesen, während die Kundendaten eingetragen werden
+  if (S.kv){ const bytes = S.kv.bytes, pages = S.kv.pages; const run = detectFields(bytes, pages).then(d => ocrFields(bytes, d.imagePages)); run.catch(() => {}); S.kvOcr = { bytes, run }; }
 });
 $("#attIn").addEventListener("change", async e => {
   const files = [...e.target.files]; e.target.value = "";
@@ -852,13 +1096,15 @@ function drawFields(){
       }
       wrap.appendChild(d); return;
     }
-    d.className = "sigfield" + (f.role==="vk"?" vk":"") + (f.sig?" signed":"") + (S.step===3 && !f.sig?" tap":"");
-    const lab = document.createElement("span"); lab.textContent = f.sig ? "✓ " + nameFor(f.role) : ROLE[f.role] + (S.step===3?" – hier unterschreiben":"");
+    const mine = S.step===3 && !f.sig && f.role===S.phase, waits = S.step===3 && !f.sig && !mine;
+    d.className = "sigfield" + (f.role==="vk"?" vk":"") + (f.sig?" signed":"") + (mine?" tap":"") + (waits?" wait":"") + (f.id===S.fresh?" fresh":"");
+    const lab = document.createElement("span");
+    lab.textContent = f.sig ? "✓ " + nameFor(f.role) : waits ? ROLE[f.role] + " · nach der Übergabe" : ROLE[f.role] + (S.step===3 ? (f.role==="kd" ? " · hier unterschreiben" : " · hier unterschreiben") : "");
     lab.style.position = "relative";
     if (f.sig){ const img = new Image(); img.src = f.sig.url; img.alt = "Unterschrift " + nameFor(f.role); d.appendChild(img); }
     d.appendChild(lab);
     if (S.step===2){ d.classList.add("drag"); d.title = "Ziehen zum Verschieben"; dragFrom(d, d, f, wrap); d.append(removeBtn(f), resizer(d, f, wrap)); }
-    if (S.step===3 && !f.sig){ d.setAttribute("role","button"); d.tabIndex = 0; d.addEventListener("click", () => openPad(f)); d.addEventListener("keydown", ev => { if (ev.key==="Enter") openPad(f); }); }
+    if (mine){ d.setAttribute("role","button"); d.tabIndex = 0; d.addEventListener("click", () => openPad(f)); d.addEventListener("keydown", ev => { if (ev.key==="Enter") openPad(f); }); }
     wrap.appendChild(d);
   });
 }
@@ -878,19 +1124,69 @@ function updateLists(){
   const fl = $("#fieldList"); fl.innerHTML = "";
   if (!S.fields.length){ const e = document.createElement("li"); e.className="empty"; e.style.display="block"; e.textContent = "Noch keine Felder. Mindestens eine Käufer-Unterschrift setzen."; fl.appendChild(e); }
   S.fields.filter(f => !(f.optional && !f.value)).forEach(f => fl.appendChild(mk(f,false)));
-  $("#toSign").disabled = !S.fields.some(f => isSig(f) && f.role==="kd");
-  const sigs = S.fields.filter(isSig);
+  $("#toSign").disabled = !S.fields.some(f => isSig(f) && f.role==="kd") || !!S.ocrBusy;
+  $("#toSign").textContent = S.ocrBusy ? "Bildseiten werden gelesen …" : "Weiter zur Unterschrift";
+  const sigs = S.fields.filter(f => isSig(f) && f.role===S.phase);
   const sl = $("#signList"); sl.innerHTML = ""; sigs.forEach(f => sl.appendChild(mk(f,true)));
-  const all = sigs.length && sigs.every(f => f.sig);
-  $("#finish").disabled = !all;
-  $("#lockHint").textContent = all ? "Alle Unterschriften sind da." : (S.locked ? "Dokument ist gesperrt. Tippen Sie auf das nächste offene Feld." : "Tippen Sie auf ein markiertes Feld im Dokument.");
+  const all = sigs.length > 0 && sigs.every(f => f.sig), kd = S.phase==="kd";
+  $("#handBtn").hidden = kd; $("#finish").hidden = !kd;
+  $("#handBtn").disabled = !all; $("#finish").disabled = !all;
+  $("#finish").textContent = "Fertig, iPad zurückgeben";
+  const who = kd ? S.meta.kunde : S.meta.verkaeufer;
+  $("#signWho").className = "who " + (kd ? "kd" : "vk"); $("#signAv").textContent = initials(who); $("#signName").textContent = who;
+  $("#signRole").textContent = kd ? "Käufer · Vorgang " + S.meta.vorgang : "Verkäufer · Autowelt Prusseit GmbH";
+  $("#signHead").textContent = kd ? "Sie unterschreiben dieses Dokument" : "Du unterschreibst zuerst";
+  const left = sigs.filter(f => !f.sig).length;
+  $("#lockHint").textContent = all ? (kd ? "Alle Unterschriften sind da. Vielen Dank!" : "Fertig. Jetzt das iPad an " + S.meta.kunde + " übergeben.")
+    : kd ? (left === 1 ? "Noch eine Unterschrift. Tippen Sie auf das rot markierte Feld." : "Noch " + left + " Unterschriften. Tippen Sie auf ein rot markiertes Feld.")
+         : (left === 1 ? "Noch eine Unterschrift von dir, dann übergibst du an den Kunden." : "Noch " + left + " Unterschriften von dir, dann übergibst du an den Kunden.");
 }
 $("#toSign").addEventListener("click", () => {
   document.activeElement?.blur?.();
   const empty = S.fields.filter(f => f.kind==="text" && !f.optional && !String(f.value||"").trim());
   if (empty.length && !confirm(empty.length + (empty.length===1 ? " Textfeld ist" : " Textfelder sind") + " noch leer. Ab der ersten Unterschrift lässt sich nichts mehr ändern. Trotzdem weiter?")) { jumpTo(empty[0]); return; }
-  S.maxStep = 3; go(3);
+  S.maxStep = 3;
+  if (S.fields.some(f => isSig(f) && f.role==="vk" && !f.sig)){ S.phase = "vk"; go(3); const n = S.fields.find(f => isSig(f) && f.role==="vk"); if (n) setTimeout(() => jumpTo(n), 60); }
+  else { S.phase = "vk"; go(3); showHand("toKd"); }
 });
+/* ---------- Übergabe: Verkäufer → Kunde → Verkäufer ---------- */
+let handMode = null, holdT = null;
+function showHand(mode){
+  handMode = mode; const kd = mode==="toKd";
+  const first = (S.meta.kunde||"").trim();
+  $("#handTitle").innerHTML = ""; 
+  if (kd){ $("#handTitle").append("Guten Tag, ", Object.assign(document.createElement("span"), { className:"acc", textContent:first })); }
+  else { $("#handTitle").append("Vielen Dank, ", Object.assign(document.createElement("span"), { className:"acc", textContent:first }), "!"); }
+  $("#handText").textContent = kd
+    ? S.meta.verkaeufer + " hat Ihren Kaufvertrag vorbereitet" + (S.fields.some(f => isSig(f) && f.role==="vk") ? " und bereits unterschrieben" : "") + ". Bitte prüfen Sie den Vertrag in Ruhe und unterschreiben Sie an den rot markierten Stellen."
+    : "Ihre Unterschriften sind gespeichert. Bitte geben Sie das iPad jetzt an " + S.meta.verkaeufer + " zurück.";
+  const who = kd ? S.meta.kunde : S.meta.verkaeufer;
+  $("#handWho").className = "who " + (kd ? "kd" : "vk"); $("#handAv").textContent = initials(who); $("#handName").textContent = who;
+  $("#handRole").textContent = kd ? "Käufer · Vorgang " + S.meta.vorgang : "Verkäufer · Autowelt Prusseit GmbH";
+  $("#handGoTx").textContent = kd ? "Vertrag ansehen und unterschreiben" : "Gedrückt halten: Vertrag abschließen";
+  $("#handGo").disabled = false; $("#handGo").classList.toggle("hold", !kd); $("#handGo").classList.remove("go");
+  $("#handBack").hidden = false; $("#handBack").textContent = kd ? "Zurück" : "Zurück zum Vertrag";
+  const h = $("#hand"); h.hidden = false; animate(h.querySelector(".hand-in")); document.body.style.overflow = "hidden";
+}
+function hideHand(){ $("#hand").hidden = true; document.body.style.overflow = ""; handMode = null; }
+function handProceed(){
+  if (handMode==="toKd"){
+    hideHand(); S.phase = "kd"; go(3, true);
+    const n = S.fields.find(f => isSig(f) && f.role==="kd" && !f.sig); if (n) setTimeout(() => jumpTo(n), 80);
+    audit("handover", { to:"customer" });
+  } else if (handMode==="toVk"){
+    $("#handGo").disabled = true; $("#handGoTx").textContent = "Vertrag wird erstellt …"; $("#handBack").hidden = true;
+    S.phase = "vk"; document.body.classList.remove("customer");
+    finishDeal().then(hideHand, e => { console.error(e); $("#handGo").disabled = false; $("#handGoTx").textContent = "Nochmal versuchen"; alert("Der Vertrag konnte nicht erstellt werden: " + (e.message||e)); });
+  }
+}
+$("#handBtn").addEventListener("click", () => showHand("toKd"));
+$("#finish").addEventListener("click", () => showHand("toVk"));
+$("#handBack").addEventListener("click", () => { const m = handMode; hideHand(); if (m==="toVk") go(3); });
+const hg = $("#handGo");
+hg.addEventListener("click", e => { if (handMode==="toKd" || e.detail===0) handProceed(); });
+hg.addEventListener("pointerdown", () => { if (handMode!=="toVk" || hg.disabled) return; hg.classList.add("go"); holdT = setTimeout(() => { hg.classList.remove("go"); handProceed(); }, 1100); });
+["pointerup","pointerleave","pointercancel"].forEach(ev => hg.addEventListener(ev, () => { clearTimeout(holdT); if (!hg.disabled) hg.classList.remove("go"); }));
 
 /* ---------- Unterschrift-Pad ---------- */
 const cv = $("#padCanvas"); const ctx = cv.getContext("2d");
@@ -914,7 +1210,7 @@ $("#padClear").addEventListener("click", () => { strokes = []; redraw(); padStat
 $("#padCancel").addEventListener("click", closePad);
 document.addEventListener("keydown", e => { if (e.key==="Escape" && !$("#pad").hidden) closePad(); });
 function openPad(f){
-  if (S.step!==3 || f.sig) return;
+  if (S.step!==3 || f.sig || f.role!==S.phase) return;
   active = f; strokes = []; cur = null; openedAt = performance.now();
   const n = nameFor(f.role);
   $("#padTitle").textContent = "Unterschrift " + ROLE[f.role];
@@ -943,8 +1239,8 @@ $("#padOk").addEventListener("click", async () => {
     pressure: allP.some(p => p.p!==0.5 && p.p!==0), input: allP.some(p=>p.k==="p") ? "Stift" : allP.some(p=>p.k==="t") ? "Finger" : "Maus",
     bioHash: await sha256(new TextEncoder().encode(bio)), consent: !$("#consentRow").hidden,
   };
-  S.locked = true; closePad(); go(3);
-  const next = S.fields.find(g => isSig(g) && !g.sig); if (next) setTimeout(() => jumpTo(next), 50);
+  S.locked = true; S.fresh = active_f.id; closePad(); go(3); S.fresh = null;
+  const next = S.fields.find(g => isSig(g) && !g.sig && g.role===S.phase); if (next) setTimeout(() => jumpTo(next), 900);
   try { await recordSignature(active_f); }
   catch(e) { console.error(e); alert("Die Unterschrift ist im Dokument, konnte aber nicht im Archiv protokolliert werden: " + (e.message||e)); }
 });
@@ -956,8 +1252,7 @@ function wrapText(s, font, size, max){
   if (line.trim()) out.push(line.trim());
   return out.flatMap(l => { const r=[]; while (font.widthOfTextAtSize(l,size) > max){ let i=l.length; while(i>1 && font.widthOfTextAtSize(l.slice(0,i),size)>max) i--; r.push(l.slice(0,i)); l=l.slice(i);} r.push(l); return r; });
 }
-$("#finish").addEventListener("click", async () => {
-  const btn = $("#finish"); btn.disabled = true; btn.textContent = "Wird erstellt …";
+async function finishDeal(){
   const { PDFDocument, StandardFonts, rgb } = PDFLib;
   const doc = await PDFDocument.load(S.orig, { ignoreEncryption:true });
   const f = await doc.embedFont(StandardFonts.Helvetica), fb = await doc.embedFont(StandardFonts.HelveticaBold), fm = await doc.embedFont(StandardFonts.Courier);
@@ -1044,19 +1339,19 @@ $("#finish").addEventListener("click", async () => {
   doc.setTitle("Kaufvertrag " + S.meta.vorgang + " (unterschrieben)"); doc.setProducer("Prusseit Sign"); doc.setKeywords(["sha256:" + S.origHash]);
   doc.setModificationDate(now);
   S.final = await doc.save(); S.finalHash = await sha256(S.final);
-  btn.textContent = "Vertrag abschließen";
   await showFinal(now);
   archiveFinal();
-});
+}
 async function showFinal(now){
   S.maxStep = 4; go(4);
-  $("#doneLede").textContent = "Alle Unterschriften sind eingebettet, das Prüfprotokoll hängt als letzte Seite an. " + fmtDT(now) + ".";
+  $("#doneLede").textContent = "Alle Unterschriften sind eingebettet, das Prüfprotokoll hängt am Ende an. " + fmtDT(now) + ".";
   const dl = $("#summary"); dl.innerHTML = "";
   const add = (k,v,mono) => { const dt=document.createElement("dt"); dt.textContent=k; const dd=document.createElement("dd"); dd.textContent=v; if(mono){dd.style.fontFamily="var(--f-mono)";dd.style.fontSize="13px";} dl.append(dt,dd); };
   add("Vorgang", S.meta.vorgang); add("Kunde", S.meta.kunde); add("Unterschriften", S.fields.filter(isSig).length + " von " + S.fields.filter(isSig).length);
   add("Original", short(S.origHash), true); add("Final", short(S.finalHash), true); add("Siegel", "wird erstellt …", true); S.sealed = null;
   $("#mailAddr").value = S.meta.mail || ""; $("#sendMail").textContent = "Senden"; S.sent = false;
-  $("#saveMsg").hidden = true; $("#mailMsg").hidden = true; $("#archMsg").hidden = true;
+  $("#saveMsg").hidden = true; $("#mailMsg").hidden = true;
+  ["tSave","tSeal","tMail"].forEach(id => trk(id, "", "Wartet …")); $("#sealBadge").classList.remove("on");
   $("#savePdf").hidden = false;
   await renderDoc(S.final, $("#finalViewer"), false);
 }
@@ -1073,7 +1368,7 @@ $("#savePdf").addEventListener("click", async () => {
 /* ---------- Versand (Edge Function send-contract) ---------- */
 async function sendContract(resend){
   const m = $("#mailMsg"), b = $("#sendMail");
-  m.hidden = false; m.classList.remove("err"); m.textContent = "Wird verschickt …"; b.disabled = true;
+  m.hidden = true; m.classList.remove("err"); b.disabled = true; trk("tMail", "run", "Wird verschickt …");
   try {
     const addr = $("#mailAddr").value.trim();
     if (addr !== (S.meta.mail || "")){
@@ -1086,18 +1381,22 @@ async function sendContract(resend){
     if (error){ let msg = error.message; try { msg = (await error.context.json()).error || msg; } catch {} throw new Error(msg); }
     const r = data?.results || {};
     if (r.mail) throw new Error("Mailversand ist noch nicht eingerichtet. Das PDF liegt im Archiv.");
-    S.sent = true; b.textContent = "Erneut senden";
-    m.textContent = (S.meta.mail ? "Verschickt an " + S.meta.mail + "." : "Nicht verschickt, der Kunde hat keine E-Mail-Adresse. Das PDF liegt im Archiv.");
-  } catch(e){ console.error(e); m.classList.add("err"); m.textContent = "Versand fehlgeschlagen: " + (e.message||e); }
+    S.sent = !!S.meta.mail; b.textContent = S.sent ? "Erneut senden" : "Senden";
+    if (S.meta.mail){ trk("tMail", "ok", "An " + S.meta.mail + ", Antworten gehen an dich."); if (resend){ m.hidden = false; m.textContent = "Erneut verschickt an " + S.meta.mail + "."; } }
+    else trk("tMail", "", "Keine E-Mail-Adresse. Trag sie unten ein und tippe auf Senden.");
+  } catch(e){ console.error(e); trk("tMail", "err", "Versand fehlgeschlagen: " + (e.message||e)); }
   finally { b.disabled = false; }
 }
 $("#sendMail").addEventListener("click", () => sendContract(S.sent));
-function resetDeal(){ views.forEach(v => { v.io.disconnect(); v.pdf.destroy(); }); views.clear(); S.orig=null; S.fields=[]; S.locked=false; S.dbLocked=false; S.dealId=null; S.final=null; S.maxStep=1; $("#viewer").innerHTML=""; $("#finalViewer").innerHTML=""; ["#mNr","#mKd","#mMail","#mFz"].forEach(q => $(q).value = ""); S.kv = null; S.atts = []; S.parts = null; showDocs(); }
+function resetDeal(){ S.ocrBusy = false; S.kvOcr = null; S.phase = "vk"; views.forEach(v => { v.io.disconnect(); v.pdf.destroy(); }); views.clear(); S.orig=null; S.fields=[]; S.locked=false; S.dbLocked=false; S.dealId=null; S.final=null; S.maxStep=1; $("#viewer").innerHTML=""; $("#finalViewer").innerHTML=""; ["#mNr","#mKd","#mMail","#mFz"].forEach(q => $(q).value = ""); S.kv = null; S.atts = []; S.parts = null; showDocs(); }
 $("#restart").addEventListener("click", () => { resetDeal(); go(1); });
 
 /* ---------- Anmeldung ---------- */
 let signupMode = false;
+const T0 = performance.now();
+const splashOut = () => setTimeout(() => $("#splash").classList.add("out"), Math.max(0, 900 - (performance.now() - T0)));
 function showAuth(){
+  document.body.classList.add("authing"); document.body.classList.remove("customer"); splashOut(); hideHand(); if (!$("#pad").hidden) closePad();
   ["#s1","#s2","#s4","#sA"].forEach(q => $(q).hidden = true);
   document.querySelector(".steps").hidden = true; $("#userBar").hidden = true; $("#s0").hidden = false;
 }
@@ -1141,12 +1440,13 @@ $("#authPw").addEventListener("keydown", e => { if (e.key==="Enter") $("#authGo"
 $("#logout").addEventListener("click", async () => { await sb.auth.signOut(); });
 
 async function onSession(session){
-  if (!session){ me = null; showAuth(); return; }
+  if (!session){ me = null; showAuth(); animate($("#s0")); return; }
   if (me?.id === session.user.id) return;
   const { data, error } = await sb.from("profiles").select("id,email,full_name,role").eq("id", session.user.id).single();
   if (error || !data){ $("#authErr").textContent = "Profil nicht gefunden. Bitte erneut anmelden."; $("#authErr").hidden = false; await sb.auth.signOut(); return; }
   me = data;
-  $("#userName").textContent = me.full_name || me.email; $("#userBar").hidden = false;
+  document.body.classList.remove("authing"); splashOut();
+  $("#userName").textContent = me.full_name || me.email; $("#userAv").textContent = initials(me.full_name || me.email); $("#userBar").hidden = false;
   $("#mVk").value = me.full_name || me.email;
   resetDeal(); go(1);
 }
@@ -1157,12 +1457,17 @@ const STATUS = { draft:"Entwurf", signing:"in Unterschrift", signed:"unterschrie
 let archRows = [];
 async function showArchive(){
   ["#s0","#s1","#s2","#s4"].forEach(q => $(q).hidden = true);
-  document.querySelector(".steps").hidden = true; $("#sA").hidden = false; $("#navArch").setAttribute("aria-current","page");
+  document.querySelector(".steps").hidden = true; $("#sA").hidden = false; $("#navArch").setAttribute("aria-current","page"); animate($("#sA"));
   $("#archLede").textContent = me.role==="admin" ? "Alle Vorgänge aller Verkäufer." : "Deine Vorgänge.";
   const list = $("#archList"); list.innerHTML = '<p class="empty">Wird geladen …</p>';
   const { data, error } = await sb.from("deals").select("id,contract_no,vehicle,customer_name,status,created_at,signed_at,final_path,sealed_path,original_path,profiles(full_name,email)").order("created_at", { ascending:false }).limit(500);
   if (error){ list.innerHTML = ""; const p = document.createElement("p"); p.className = "toast err"; p.textContent = "Archiv konnte nicht geladen werden: " + error.message; list.appendChild(p); return; }
   archRows = data; renderArchive(); pushState().catch(() => {});
+  const mon = new Date(); mon.setDate(1); mon.setHours(0,0,0,0);
+  const st = $("#archStats"); st.innerHTML = "";
+  [[data.length, "Vorgänge gesamt"], [data.filter(r => r.signed_at && new Date(r.signed_at) >= mon).length, "Verkauft diesen Monat", true], [data.filter(r => !r.final_path).length, "Offen"]].forEach(([n, l, acc]) => {
+    const d = document.createElement("div"); d.className = "stat" + (acc ? " acc" : ""); const b = document.createElement("b"); b.textContent = n; const sm = document.createElement("small"); sm.textContent = l; d.append(b, sm); st.appendChild(d);
+  });
   window.scrollTo({top:0, behavior:"instant"});
 }
 function renderArchive(){
@@ -1170,13 +1475,14 @@ function renderArchive(){
   const rows = archRows.filter(r => !q || [r.customer_name, r.contract_no, r.vehicle, r.profiles?.full_name].some(v => (v||"").toLowerCase().includes(q)));
   const list = $("#archList"); list.innerHTML = "";
   if (!rows.length){ const p = document.createElement("p"); p.className = "empty"; p.textContent = q ? "Nichts gefunden." : "Noch keine Vorgänge."; list.appendChild(p); return; }
-  rows.forEach(r => {
+  rows.forEach((r, i) => {
     const row = document.createElement("div"); row.className = "arch-row";
+    const av = document.createElement("span"); av.className = "av"; av.textContent = initials(r.customer_name);
     const a = document.createElement("div"); const b = document.createElement("b"); b.textContent = r.customer_name;
     const sm = document.createElement("small"); sm.textContent = [r.contract_no, r.vehicle, fmtDT(new Date(r.created_at))].filter(Boolean).join(" · ");
     a.append(b, sm);
     const s = document.createElement("small"); s.className = "seller"; s.textContent = r.profiles?.full_name || r.profiles?.email || "";
-    const pill = document.createElement("span"); pill.className = "pill" + (r.final_path ? " ok" : ""); pill.textContent = STATUS[r.status] || r.status;
+    const pill = document.createElement("span"); pill.className = "pill" + (r.final_path ? " ok" : r.status==="draft" ? " mute" : ""); pill.textContent = STATUS[r.status] || r.status;
     const btn = document.createElement("button"); btn.className = "btn small"; btn.textContent = "PDF";
     const path = r.sealed_path || r.final_path || r.original_path; btn.disabled = !path;
     btn.addEventListener("click", async () => {
@@ -1185,7 +1491,8 @@ function renderArchive(){
       if (error){ w?.close(); alert("PDF konnte nicht geöffnet werden: " + error.message); return; }
       if (w) w.location = data.signedUrl; else location.href = data.signedUrl;
     });
-    row.append(a, s, pill, btn); list.appendChild(row);
+    row.style.animationDelay = Math.min(i, 12) * 35 + "ms";
+    row.append(av, a, s, pill, btn); list.appendChild(row);
   });
 }
 $("#archQ").addEventListener("input", renderArchive);
