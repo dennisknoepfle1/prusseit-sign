@@ -25,7 +25,7 @@ function shell(inner: string) {
   return `<!doctype html><html><body style="margin:0;background:#f4f3f3;font-family:Arial,Helvetica,sans-serif;color:#18151a">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">
 <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border-radius:10px;overflow:hidden">
-<tr><td style="background:#0e0c0d;padding:16px 24px;font-size:20px;font-weight:bold;letter-spacing:.04em;color:#fff">AUTOWELT-<span style="color:#e3001b">PRUSSEIT</span></td></tr>
+<tr><td style="background:#0e0c0d;padding:18px 24px"><img src="https://dennisknoepfle1.github.io/prusseit-sign/logo-mail.png" width="210" height="60" alt="Autowelt Prusseit" style="display:block;border:0;width:210px;height:auto"></td></tr>
 <tr><td style="padding:24px;font-size:15px;line-height:1.5">${inner}</td></tr>
 <tr><td style="padding:14px 24px;background:#f4f3f3;font-size:12px;color:#6a6265">Autowelt Prusseit GmbH · Rauher Grund 26 · 72160 Horb am Neckar · autowelt-prusseit.de</td></tr>
 </table></td></tr></table></body></html>`;
@@ -82,10 +82,9 @@ Deno.serve(async (req) => {
           subject: `Ihr Kaufvertrag ${nr} – Autowelt Prusseit`.replace("  ", " "),
           html: shell(`<p>Guten Tag ${esc(deal.customer_name)},</p>
 <p>anbei erhalten Sie Ihren unterschriebenen Kaufvertrag${nr ? " " + esc(nr) : ""} als PDF. Die letzten Seiten enthalten das Prüfprotokoll der elektronischen Unterzeichnung.</p>
-<p>Bei Fragen antworten Sie einfach auf diese E-Mail, sie geht direkt an ${esc(sellerName)}.</p>
 <p>Vielen Dank für Ihr Vertrauen.</p>
 <p>Mit freundlichen Grüßen<br>${esc(sellerName)}<br>Autowelt Prusseit GmbH</p>`),
-          text: `Guten Tag ${deal.customer_name},\n\nanbei erhalten Sie Ihren unterschriebenen Kaufvertrag ${nr} als PDF. Die letzten Seiten enthalten das Prüfprotokoll der elektronischen Unterzeichnung.\n\nBei Fragen antworten Sie einfach auf diese E-Mail.\n\nMit freundlichen Grüßen\n${sellerName}\nAutowelt Prusseit GmbH`,
+          text: `Guten Tag ${deal.customer_name},\n\nanbei erhalten Sie Ihren unterschriebenen Kaufvertrag ${nr} als PDF. Die letzten Seiten enthalten das Prüfprotokoll der elektronischen Unterzeichnung.\n\nMit freundlichen Grüßen\n${sellerName}\nAutowelt Prusseit GmbH`,
           attachments,
         });
       }
