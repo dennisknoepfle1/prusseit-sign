@@ -248,6 +248,7 @@ p{margin:0}
 .baseline{position:absolute;left:6%;right:6%;bottom:24%;border-bottom:1.5px solid #B9B2B4;pointer-events:none}
 .baseline::before{content:"×";position:absolute;left:-4px;bottom:2px;color:#9B9396;font-size:20px}
 .baseline::after{content:"Hier unterschreiben";position:absolute;right:0;top:8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#B9B2B4}
+#printName{text-transform:uppercase;font-family:var(--f-mono);letter-spacing:.06em;font-size:18px}
 .consent{display:flex;gap:12px;align-items:flex-start;font-size:15px;padding:14px;border:1px solid var(--line);border-radius:var(--r-sm);cursor:pointer;background:var(--surface-2);transition:border-color .2s}
 .consent:has(input:checked){border-color:var(--ok)}
 .consent input{width:24px;height:24px;flex:none;accent-color:var(--red);margin-top:1px}
@@ -517,6 +518,7 @@ body.customer .steps,body.customer .user{visibility:hidden}
       </div>
       <button class="btn small" id="padCancel">Abbrechen</button>
     </div>
+    <label class="fld" id="nameRow"><span class="label">Ihr Name in Druckbuchstaben</span><input id="printName" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="VORNAME NACHNAME"></label>
     <label class="consent" id="consentRow"><input type="checkbox" id="consent"><span id="consentText"></span></label>
     <div class="canvas-wrap"><div class="baseline"></div><canvas id="padCanvas"></canvas></div>
     <div class="pad-foot">
@@ -562,6 +564,8 @@ let downloads = null;
 
 const ROLE = { kd:"Käufer", vk:"Verkäufer" };
 const fmtDT = d => new Intl.DateTimeFormat("de-DE",{dateStyle:"medium",timeStyle:"medium"}).format(d);
+const stamp = d => { const p = Object.fromEntries(new Intl.DateTimeFormat("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit",timeZoneName:"short"}).formatToParts(d).map(x => [x.type, x.value]));
+  return "am " + p.day + "." + p.month + "." + p.year + " um " + p.hour + ":" + p.minute + ":" + p.second + " Uhr" + (p.timeZoneName ? " (" + p.timeZoneName + ")" : ""); };
 const short = h => h.slice(0,16).toUpperCase().match(/.{4}/g).join(" ") + " …";
 async function sha256(bytes){ const d = await crypto.subtle.digest("SHA-256", bytes); return [...new Uint8Array(d)].map(b=>b.toString(16).padStart(2,"0")).join(""); }
 const winAnsi = s => String(s).replace(/[^\x20-\x7E\xA0-\xFF–—‘’“”„•…€]/g,"?");
@@ -847,7 +851,7 @@ async function recordSignature(f){
   const { error } = await sb.from("signatures").insert({ deal_id:S.dealId, field_id:f.id, signer_role:f.role==="kd"?"customer":"seller",
     signer_name:f.sig.name, biometric_hash:f.sig.bioHash, user_agent:navigator.userAgent });
   if (error) throw error;
-  await audit("signed", { field:f.id, role:f.role, name:f.sig.name, bio_sha256:f.sig.bioHash, strokes:f.sig.strokes, points:f.sig.points, input:f.sig.input, consent:f.sig.consent });
+  await audit("signed", { field:f.id, role:f.role, name:f.sig.name, bio_sha256:f.sig.bioHash, strokes:f.sig.strokes, points:f.sig.points, input:f.sig.input, consent:f.sig.consent, printed:f.sig.printed, signed_at_client:f.sig.signedAt.toISOString() });
 }
 function trk(id, state, text){ const li = $("#" + id); li.className = state || ""; if (text != null) li.querySelector("small").textContent = text; }
 async function archiveFinal(){
@@ -1099,7 +1103,7 @@ function drawFields(){
     const mine = S.step===3 && !f.sig && f.role===S.phase, waits = S.step===3 && !f.sig && !mine;
     d.className = "sigfield" + (f.role==="vk"?" vk":"") + (f.sig?" signed":"") + (mine?" tap":"") + (waits?" wait":"") + (f.id===S.fresh?" fresh":"");
     const lab = document.createElement("span");
-    lab.textContent = f.sig ? "✓ " + nameFor(f.role) : waits ? ROLE[f.role] + " · nach der Übergabe" : ROLE[f.role] + (S.step===3 ? (f.role==="kd" ? " · hier unterschreiben" : " · hier unterschreiben") : "");
+    lab.textContent = f.sig ? "✓ " + (f.sig.printed || nameFor(f.role)) + " · " + f.sig.signedAt.toLocaleString("de-DE",{dateStyle:"short",timeStyle:"medium"}) : waits ? ROLE[f.role] + " · nach der Übergabe" : ROLE[f.role] + (S.step===3 ? (f.role==="kd" ? " · hier unterschreiben" : " · hier unterschreiben") : "");
     lab.style.position = "relative";
     if (f.sig){ const img = new Image(); img.src = f.sig.url; img.alt = "Unterschrift " + nameFor(f.role); d.appendChild(img); }
     d.appendChild(lab);
@@ -1203,9 +1207,10 @@ cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end)
 function padState(){
   const pts = strokes.reduce((a,s)=>a+s.length,0);
   $("#padMeta").textContent = strokes.length ? strokes.length + " Striche · " + pts + " Messpunkte" : "Noch keine Striche";
-  $("#padOk").disabled = !strokes.length || (!$("#consentRow").hidden && !$("#consent").checked);
+  $("#padOk").disabled = !strokes.length || (!$("#consentRow").hidden && !$("#consent").checked) || (!$("#nameRow").hidden && $("#printName").value.trim().length < 3);
 }
 $("#consent").addEventListener("change", padState);
+$("#printName").addEventListener("input", padState);
 $("#padClear").addEventListener("click", () => { strokes = []; redraw(); padState(); });
 $("#padCancel").addEventListener("click", closePad);
 document.addEventListener("keydown", e => { if (e.key==="Escape" && !$("#pad").hidden) closePad(); });
@@ -1217,6 +1222,7 @@ function openPad(f){
   $("#padSub").textContent = n + " · Vorgang " + S.meta.vorgang + " · Fingerabdruck " + short(S.origHash);
   const firstKd = !S.fields.some(g => isSig(g) && g.role==="kd" && g.sig);
   $("#consentRow").hidden = !(f.role==="kd" && firstKd); $("#consent").checked = false;
+  $("#nameRow").hidden = f.role!=="kd"; $("#printName").value = f.role==="kd" ? (S.printName || nameFor("kd").toLocaleUpperCase("de-DE")) : "";
   $("#consentText").textContent = "Ich, " + n + ", habe den Kaufvertrag gelesen und unterschreibe ihn elektronisch. Das Dokument mit dem angezeigten Fingerabdruck ist das, was ich unterschreibe.";
   $("#pad").hidden = false; document.body.style.overflow = "hidden";
   requestAnimationFrame(sizePad); padState();
@@ -1238,7 +1244,9 @@ $("#padOk").addEventListener("click", async () => {
     durationMs: allP.length ? allP[allP.length-1].t - allP[0].t : 0,
     pressure: allP.some(p => p.p!==0.5 && p.p!==0), input: allP.some(p=>p.k==="p") ? "Stift" : allP.some(p=>p.k==="t") ? "Finger" : "Maus",
     bioHash: await sha256(new TextEncoder().encode(bio)), consent: !$("#consentRow").hidden,
+    printed: (active.role==="kd" ? $("#printName").value : nameFor(active.role)).trim().toLocaleUpperCase("de-DE"),
   };
+  if (active.role==="kd") S.printName = active.sig.printed;
   S.locked = true; S.fresh = active_f.id; closePad(); go(3); S.fresh = null;
   const next = S.fields.find(g => isSig(g) && !g.sig && g.role===S.phase); if (next) setTimeout(() => jumpTo(next), 900);
   try { await recordSignature(active_f); }
@@ -1289,8 +1297,15 @@ async function finishDeal(){
     const pg = pages[fl.page]; const {width:W, height:H} = pg.getSize();
     const png = await doc.embedPng(fl.sig.url);
     const bw = fl.w*W, bh = fl.h*H; const x = fl.x*W, y = H-(fl.y+fl.h)*H;
-    pg.drawImage(png, {x, y:y+bh*0.12, width:bw, height:bh*0.88});
-    pg.drawText(winAnsi("Elektronisch unterschrieben · " + fmtDT(fl.sig.signedAt)), {x:x+2, y:y+bh-7, size:5.5, font:f, color:grey});
+    // Unterschrift oben, darunter Name in Druckbuchstaben, Datum und Uhrzeit
+    // Oben im Feld: Name in Druckbuchstaben, Datum und Uhrzeit; darunter die Unterschrift
+    const nm = winAnsi(fl.sig.printed || fl.sig.name.toUpperCase()), ts = winAnsi(stamp(fl.sig.signedAt));
+    let s1 = 6.5; while (s1 > 4.5 && fb.widthOfTextAtSize(nm, s1) > bw-4) s1 -= 0.25;
+    let s2 = 5; while (s2 > 3.5 && f.widthOfTextAtSize(ts, s2) > bw-4) s2 -= 0.25;
+    const head = s1 + s2 + 3;
+    pg.drawText(nm, {x:x+2, y:y+bh-1-s1, size:s1, font:fb, color:ink});
+    pg.drawText(ts, {x:x+2, y:y+bh-2-s1-s2, size:s2, font:f, color:grey});
+    pg.drawImage(png, {x, y:y+bh*0.04, width:bw, height:Math.max(bh*0.4, bh-head-bh*0.04)});
   }
   // Prüfprotokoll (bei Bedarf über mehrere Seiten)
   const proto = []; let p, y;
@@ -1317,7 +1332,7 @@ async function finishDeal(){
   for (const fl of S.fields.filter(isSig)){
     sect("Unterschrift " + ROLE[fl.role]);
     const s = fl.sig;
-    row("Name", s.name); row("Zeitpunkt", fmtDT(s.signedAt)); row("Eingabe", s.input + (s.pressure ? ", mit Druckdaten" : ", ohne Druckdaten"));
+    row("Name", s.name); if (s.printed) row("Name in Druckbuchstaben", s.printed + (fl.role==="kd" ? " (vom Kunden bestätigt)" : "")); row("Zeitpunkt", fmtDT(s.signedAt)); row("Eingabe", s.input + (s.pressure ? ", mit Druckdaten" : ", ohne Druckdaten"));
     row("Schreibdynamik", s.strokes + " Striche, " + s.points + " Messpunkte, " + (s.durationMs/1000).toFixed(1).replace(".",",") + " s");
     row("Biometrie SHA-256", s.bioHash, true);
     if (s.consent) row("Erklärung", "Bestätigt: Vertrag gelesen, elektronische Unterzeichnung des Dokuments mit obigem Fingerabdruck.");
@@ -1388,7 +1403,7 @@ async function sendContract(resend){
   finally { b.disabled = false; }
 }
 $("#sendMail").addEventListener("click", () => sendContract(S.sent));
-function resetDeal(){ S.ocrBusy = false; S.kvOcr = null; S.phase = "vk"; views.forEach(v => { v.io.disconnect(); v.pdf.destroy(); }); views.clear(); S.orig=null; S.fields=[]; S.locked=false; S.dbLocked=false; S.dealId=null; S.final=null; S.maxStep=1; $("#viewer").innerHTML=""; $("#finalViewer").innerHTML=""; ["#mNr","#mKd","#mMail","#mFz"].forEach(q => $(q).value = ""); S.kv = null; S.atts = []; S.parts = null; showDocs(); }
+function resetDeal(){ S.printName = ""; S.ocrBusy = false; S.kvOcr = null; S.phase = "vk"; views.forEach(v => { v.io.disconnect(); v.pdf.destroy(); }); views.clear(); S.orig=null; S.fields=[]; S.locked=false; S.dbLocked=false; S.dealId=null; S.final=null; S.maxStep=1; $("#viewer").innerHTML=""; $("#finalViewer").innerHTML=""; ["#mNr","#mKd","#mMail","#mFz"].forEach(q => $(q).value = ""); S.kv = null; S.atts = []; S.parts = null; showDocs(); }
 $("#restart").addEventListener("click", () => { resetDeal(); go(1); });
 
 /* ---------- Anmeldung ---------- */
