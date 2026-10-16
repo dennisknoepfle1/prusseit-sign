@@ -340,6 +340,11 @@ body.customer .steps,body.customer .user{visibility:hidden}
 .fld input.autofill{border-color:var(--ok);background:var(--ok-soft);animation:autoPop .6s var(--ease-out)}
 @keyframes autoPop{0%{box-shadow:0 0 0 0 rgba(30,122,76,.35)}100%{box-shadow:0 0 0 10px rgba(30,122,76,0)}}
 .auto-hint{color:var(--ok);font-size:14px;margin-top:10px}
+@media (max-width:1320px){.user .uname{display:none}}
+.ready{margin-top:22px;border-color:rgba(227,0,27,.35);background:linear-gradient(180deg,var(--red-soft),var(--surface) 70%)}
+.ready .arch{margin-top:12px}
+.ready h2{display:flex;align-items:center;gap:10px}
+.ready .cnt{font-family:var(--f-display);background:var(--red);color:#fff;border-radius:999px;font-size:15px;min-width:28px;height:28px;display:inline-grid;place-items:center;padding:0 8px}
 .acts{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
 .pill.go{background:var(--red);color:#fff}
 .dash-kpi{grid-template-columns:repeat(4,minmax(0,1fr))}
@@ -387,7 +392,7 @@ body.customer .steps,body.customer .user{visibility:hidden}
     <div class="user" id="userBar" hidden>
       <button class="barbtn" id="navDash" hidden>Dashboard</button>
       <button class="barbtn" id="navArch">Archiv</button>
-      <span class="av-sm" id="userAv" aria-hidden="true"></span><span><b id="userName"></b></span>
+      <span class="av-sm" id="userAv" aria-hidden="true"></span><span class="uname"><b id="userName"></b></span>
       <button class="barbtn" id="logout">Abmelden</button>
     </div>
   </div>
@@ -445,6 +450,11 @@ body.customer .steps,body.customer .user{visibility:hidden}
     <p class="eyebrow">Neuer Vorgang</p>
     <h1>Kaufvertrag <span class="acc">unterschreiben</span> lassen</h1>
     <p class="lede">Vorgang anlegen, Vertrag laden, erst du, dann der Kunde unterschreibt mit Finger oder Pencil. Am Ende entsteht ein versiegeltes PDF mit Prüfprotokoll.</p>
+    <div class="panel ready" id="readyBox" hidden>
+      <h2>Bereit zur Unterschrift <span class="cnt" id="readyCnt"></span></h2>
+      <p class="hint">Am PC vorbereitet. Antippen, dann geht es direkt mit der Unterschrift weiter.</p>
+      <div class="arch" id="readyList"></div>
+    </div>
     <div class="start">
       <div class="panel">
         <h2>Vorgang</h2>
@@ -500,7 +510,7 @@ body.customer .steps,body.customer .user{visibility:hidden}
           </div>
           <ul class="list" id="fieldList"></ul>
           <button class="btn primary block" id="toSign">Weiter zur Unterschrift</button>
-          <button class="btn block" id="saveDraft">Als Entwurf speichern, später weiter</button>
+          <button class="btn block" id="saveDraft">Speichern, am iPad unterschreiben</button>
         </div>
         <div class="panel" id="signPanel" hidden>
           <h3 id="signHead">Sie unterschreiben dieses Dokument</h3>
@@ -654,6 +664,7 @@ function go(n, force){
     $("#editPanel").hidden = n!==2; $("#signPanel").hidden = n!==3;
     setPlacing(null); drawFields(); updateLists();
   }
+  if (n===1 && me) loadReady();
   if (n !== prev || force || wasHidden){ animate($(n===1 ? "#s1" : n===4 ? "#s4" : "#s2")); window.scrollTo({top:0, behavior:"instant"}); }
   requestAnimationFrame(moveInd);
 }
@@ -1690,7 +1701,7 @@ async function loadOriginal(path){
   return new Uint8Array(await dl.data.arrayBuffer());
 }
 function fillMeta(){ $("#mNr").value = S.meta.vorgang || ""; $("#mKd").value = S.meta.kunde || ""; $("#mMail").value = S.meta.mail || ""; $("#mFz").value = S.meta.fahrzeug || ""; }
-async function resumeDraft(r){
+async function resumeDraft(r, toSign){
   try {
     const bytes = await loadOriginal(r.original_path), d = r.draft;
     resetDeal();
@@ -1703,7 +1714,8 @@ async function resumeDraft(r){
     const fi = $("#formInfo"); fi.hidden = false; fi.classList.remove("busy");
     fi.textContent = "Entwurf vom " + fmtDT(new Date(d.saved_at)) + " geladen. Felder prüfen, dann weiter zur Unterschrift.";
     await renderDoc(bytes, $("#viewer"), true); drawFields();
-    audit("draft_resumed", {});
+    audit("draft_resumed", { device:navigator.userAgent });
+    if (toSign) $("#toSign").click();
   } catch(e){ console.error(e); alert(e.message || e); }
 }
 $("#saveDraft").addEventListener("click", async () => {
@@ -1714,10 +1726,39 @@ $("#saveDraft").addEventListener("click", async () => {
     const { error } = await sb.from("deals").update({ draft }).eq("id", S.dealId);
     if (error) throw error;
     await audit("draft_saved", { fields:S.fields.length });
-    resetDeal(); await showArchive();
+    const who = S.meta.kunde; resetDeal(); go(1);
+    showInfo("Bereit fürs iPad", "Der Vertrag für " + who + " ist gespeichert. Öffne Prusseit Sign auf dem iPad: Er steht dort ganz oben unter „Bereit zur Unterschrift“.", { btn:"Neuer Vorgang", action:() => { hideHand(); go(1); } });
   } catch(e){ console.error(e); alert("Der Entwurf konnte nicht gespeichert werden: " + (e.message||e)); }
   finally { b.disabled = false; }
 });
+
+/* ---------- Startbildschirm: am PC vorbereitete Verträge ---------- */
+let readyTimer = null;
+async function loadReady(){
+  clearTimeout(readyTimer);
+  if (!me || REMOTE) return;
+  const { data, error } = await sb.from("deals").select("id,contract_no,vehicle,customer_name,status,created_at,updated_at,original_path,draft,locked_at,profiles(full_name,email)").eq("seller_id", me.id).eq("status","draft").not("draft","is",null).is("locked_at",null).order("updated_at", { ascending:false }).limit(30);
+  if (!error){
+    const rows = (data || []).filter(r => r.draft && !r.locked_at && r.status==="draft");
+    const box = $("#readyBox"), list = $("#readyList"); box.hidden = !rows.length; $("#readyCnt").textContent = rows.length; list.innerHTML = "";
+    rows.forEach(r => {
+      const row = document.createElement("div"); row.className = "arch-row";
+      const av = document.createElement("span"); av.className = "av"; av.textContent = initials(r.customer_name);
+      const a = document.createElement("div"); const b = document.createElement("b"); b.textContent = r.customer_name;
+      const sm = document.createElement("small"); sm.textContent = [r.contract_no, r.vehicle].filter(Boolean).join(" · "); a.append(b, sm);
+      const t = document.createElement("small"); t.className = "seller"; t.textContent = "vorbereitet " + fmtDT(new Date(r.draft.saved_at || r.updated_at));
+      const pill = document.createElement("span"); pill.className = "pill"; pill.textContent = (r.draft.fields || []).filter(isSig).length + " Unterschriften";
+      const acts = document.createElement("div"); acts.className = "acts";
+      const go2 = document.createElement("button"); go2.className = "btn primary small"; go2.textContent = "Unterschreiben";
+      go2.addEventListener("click", async () => { go2.disabled = true; go2.textContent = "Wird geladen …"; try { await resumeDraft(r, true); } finally { go2.disabled = false; go2.textContent = "Unterschreiben"; } });
+      const ed = document.createElement("button"); ed.className = "btn small"; ed.textContent = "Felder ansehen";
+      ed.addEventListener("click", async () => { ed.disabled = true; try { await resumeDraft(r, false); } finally { ed.disabled = false; } });
+      acts.append(ed, go2); row.append(av, a, t, pill, acts); list.appendChild(row);
+    });
+  }
+  readyTimer = setTimeout(() => { if (!$("#s1").hidden && !document.hidden) loadReady(); else readyTimer = setTimeout(loadReady, 20000); }, 20000);
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && me && !$("#s1").hidden) loadReady(); });
 
 /* ---------- Per Link unterschrieben: im Archiv abschließen ---------- */
 async function completeRemote(r){
