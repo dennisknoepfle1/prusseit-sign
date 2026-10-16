@@ -1,4 +1,4 @@
-// Versendet den fertig unterschriebenen Vertrag per Mail (Resend) an Kunde, Verkäufer und Admins
+// Versendet den fertig unterschriebenen Vertrag per Mail (Resend) an den Kunden (keine interne Kopie, das PDF liegt im Archiv)
 // und schickt eine Push-Nachricht „Fahrzeug verkauft“ an alle Admins.
 // Aufruf aus der App: POST { deal_id }, mit dem Login des Verkäufers (JWT).
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
@@ -20,7 +20,6 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 const esc = (s: string) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
 const b64 = (u: Uint8Array) => { let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
-const fmt = (d: string) => new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(d));
 
 function shell(inner: string) {
   return `<!doctype html><html><body style="margin:0;background:#f4f3f3;font-family:Arial,Helvetica,sans-serif;color:#18151a">
@@ -90,27 +89,10 @@ Deno.serve(async (req) => {
           attachments,
         });
       }
-      const internal = [...new Set([seller?.email, ...(admins ?? []).map(a => a.email)].filter(Boolean))] as string[];
-      if (internal.length) {
-        results.internal = await sendMail({
-          from: `Prusseit Sign <${FROM_ADDR}>`, to: internal, reply_to: seller?.email ? [seller.email] : undefined,
-          subject: `Verkauft: ${deal.vehicle || nr || "Fahrzeug"} an ${deal.customer_name}`,
-          html: shell(`<p><b>Ein Kaufvertrag wurde unterschrieben.</b></p>
-<table cellpadding="4" style="font-size:14px">
-<tr><td style="color:#6a6265">Kunde</td><td>${esc(deal.customer_name)}${deal.customer_email ? " &lt;" + esc(deal.customer_email) + "&gt;" : ""}</td></tr>
-<tr><td style="color:#6a6265">Fahrzeug</td><td>${esc(deal.vehicle || "–")}</td></tr>
-<tr><td style="color:#6a6265">Vorgang</td><td>${esc(nr || "–")}</td></tr>
-<tr><td style="color:#6a6265">Verkäufer</td><td>${esc(sellerName)}</td></tr>
-<tr><td style="color:#6a6265">Unterschrieben</td><td>${deal.signed_at ? fmt(deal.signed_at) : "–"}</td></tr>
-<tr><td style="color:#6a6265">Kopie an Kunde</td><td>${deal.customer_email ? "verschickt" : "keine E-Mail-Adresse angegeben"}</td></tr>
-</table>
-<p style="font-size:12px;color:#6a6265">SHA-256 final: ${esc(deal.final_sha256 || "")}</p>
-<p><a href="${APP_URL}" style="color:#e3001b">Zum Archiv</a></p>`),
-          attachments,
-        });
+      if (results.customer) {
+        await user.from("deals").update({ status: "sent" }).eq("id", deal.id);
+        await user.from("audit_events").insert({ deal_id: deal.id, event: "mailed", details: { customer: deal.customer_email, ids: results } });
       }
-      await user.from("deals").update({ status: "sent" }).eq("id", deal.id);
-      await user.from("audit_events").insert({ deal_id: deal.id, event: "mailed", details: { customer: deal.customer_email || null, internal, ids: results } });
     }
 
     // Push an Admins

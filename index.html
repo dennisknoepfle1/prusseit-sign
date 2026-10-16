@@ -336,7 +336,7 @@ p{margin:0}
         <div class="panel mail">
           <h3>Versand per E-Mail</h3>
           <label class="fld"><span class="label">E-Mail Kunde</span><input id="mailAddr" type="email" autocomplete="off" placeholder="kunde@beispiel.de"></label>
-          <p class="hint">Der Kunde bekommt das PDF, Antworten gehen an dich. Du und die Geschäftsleitung bekommen eine Kopie.</p>
+          <p class="hint">Der Kunde bekommt das PDF, Antworten gehen an dich. Das PDF liegt außerdem im Archiv.</p>
           <button class="btn dark block" id="sendMail">Erneut senden</button>
           <p class="toast" id="mailMsg" hidden></p>
         </div>
@@ -1087,7 +1087,7 @@ async function sendContract(resend){
     const r = data?.results || {};
     if (r.mail) throw new Error("Mailversand ist noch nicht eingerichtet. Das PDF liegt im Archiv.");
     S.sent = true; b.textContent = "Erneut senden";
-    m.textContent = (S.meta.mail ? "Verschickt an " + S.meta.mail + ", Kopie an dich und die Geschäftsleitung." : "Kopie an dich und die Geschäftsleitung verschickt. Der Kunde hat keine E-Mail-Adresse.");
+    m.textContent = (S.meta.mail ? "Verschickt an " + S.meta.mail + "." : "Nicht verschickt, der Kunde hat keine E-Mail-Adresse. Das PDF liegt im Archiv.");
   } catch(e){ console.error(e); m.classList.add("err"); m.textContent = "Versand fehlgeschlagen: " + (e.message||e); }
   finally { b.disabled = false; }
 }
