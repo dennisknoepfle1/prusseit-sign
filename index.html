@@ -220,6 +220,11 @@ p{margin:0}
 .mail{display:flex;flex-direction:column;gap:10px}
 .toast{font-size:14px;padding:10px 12px;border-radius:var(--r-sm);background:var(--ok-soft);color:var(--ok);animation:rise .35s var(--ease-out) backwards}
 .toast.err{background:var(--red-soft);color:var(--red-ink)}
+.net{position:fixed;left:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:15;border:0;border-radius:999px;padding:11px 16px;font:600 14px/1 inherit;font-family:inherit;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:8px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+body.customer .net,body.authing .net{display:none}
+.net::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.net.off{background:#3a2e10;color:#ffc94d}.net.sync{background:#13243f;color:#8fb6ff}.net.err{background:#4a0d14;color:#ff8a95}
+.net.sync::before{animation:netp 1s ease-in-out infinite}@keyframes netp{50%{opacity:.25}}
 .done-hero{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
 .done-hero .next-deal{margin-left:auto;font-size:17px;padding:14px 26px}
 #nextBox{margin:18px 0 4px}
@@ -637,10 +642,19 @@ if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.clo
 /* ---------- Supabase ---------- */
 const SB_URL = "https://shhtnbarfnhuizhnqpac.supabase.co";
 const SB_KEY = "sb_publishable_k-rpelA6uCSFfiisxi7rZA_pH5bow7k";
-const sb = supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession:true, autoRefreshToken:true } });
+// Jede Anfrage bekommt ein Zeitlimit, damit schwaches WLAN nichts endlos blockiert (Uploads und Siegel dürfen länger dauern)
+const netFetch = (url, opt = {}) => {
+  const u = String(url), long = /\/storage\/v1\//.test(u) ? 180000 : /\/functions\/v1\//.test(u) ? 90000 : 30000;
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), long);
+  if (opt.signal){ if (opt.signal.aborted) ctl.abort(); else opt.signal.addEventListener("abort", () => ctl.abort()); }
+  return fetch(url, { ...opt, signal:ctl.signal }).finally(() => clearTimeout(t));
+};
+const sb = supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession:true, autoRefreshToken:true }, global: { fetch:netFetch } });
 let me = null; // { id, email, full_name, role }
 const REMOTE = new URLSearchParams(location.search).get("sign"); // Kunde öffnet einen Unterschriftslink
 // Unterschrieben wird nur auf dem iPad (Touch-Gerät); am PC wird nur vorbereitet
+let OPEN_ID = new URLSearchParams(location.search).get("open");
+if (OPEN_ID) history.replaceState(null, "", location.pathname);
 const SIGN_DEVICE = matchMedia("(pointer: coarse)").matches || (navigator.maxTouchPoints > 1 && /Macintosh|iPad/.test(navigator.userAgent));
 
 const S = { step:1, orig:null, origHash:"", fileName:"", fields:[], placing:null, locked:false, final:null, finalHash:"", meta:{}, maxStep:1 };
@@ -949,10 +963,9 @@ async function runOcr(bytes, pages, fi){
   finally { if (S.dealId === deal){ S.ocrBusy = false; fi.classList.remove("busy"); updateLists(); } }
 }
 /* ---------- Archiv-Anbindung ---------- */
-async function audit(event, details={}){
-  if (!S.dealId) return;
-  const { error } = await sb.from("audit_events").insert({ deal_id:S.dealId, event, details:{ ...details, ua:navigator.userAgent, tz:Intl.DateTimeFormat().resolvedOptions().timeZone, client_time:new Date().toISOString() } });
-  if (error) console.error("audit", error);
+function audit(event, details={}){
+  if (!S.dealId) return Promise.resolve();
+  return enqueue("audit", { event, details:{ ...details, ua:navigator.userAgent, tz:Intl.DateTimeFormat().resolvedOptions().timeZone, client_time:new Date().toISOString() } });
 }
 async function createDeal(bytes){
   const pages = S.pageSizes.length;
@@ -976,57 +989,193 @@ async function persistDraft(extra = {}){
   const draft = { v:2, fields:S.fields.map(f => ({ ...f, sig:null })), sigs:Object.fromEntries(S.fields.filter(f => isSig(f) && f.sig).map(f => [f.id, sigOut(f.sig)])),
     meta:S.meta, parts:S.parts || null, fileName:S.fileName, saved_at:new Date().toISOString(), ready: S.draftReady || false, ...extra };
   S.draftReady = draft.ready;
-  const { error } = await sb.from("deals").update({ draft }).eq("id", S.dealId);
-  if (error) throw error;
+  await enqueue("draft", { draft });
 }
 const autosave = () => { clearTimeout(S.saveT); const id = S.dealId; S.saveT = setTimeout(() => { if (S.dealId === id) persistDraft().catch(e => console.warn("Zwischenspeichern", e)); }, 2500); };
 async function lockDeal(){
   if (!S.dealId || S.dbLocked) return;
-  const { error } = await sb.from("deals").update({ fields:fieldGeo(), locked_at:new Date().toISOString(), status:"signing" }).eq("id", S.dealId);
-  if (error) throw error;
   S.dbLocked = true;
+  await enqueue("lock", { fields:fieldGeo(), at:new Date().toISOString() });
   await audit("locked", { fields:S.fields.length });
   await persistDraft().catch(e => console.warn(e));
 }
 async function recordSignature(f){
   if (!S.dealId) return;
   await lockDeal();
-  const { error } = await sb.from("signatures").insert({ deal_id:S.dealId, field_id:f.id, signer_role:f.role==="kd"?"customer":"seller",
-    signer_name:f.sig.name, biometric_hash:f.sig.bioHash, user_agent:navigator.userAgent });
-  if (error) throw error;
-  persistDraft().catch(e => console.warn("Zwischenspeichern", e));
+  await enqueue("sig", { row:{ deal_id:S.dealId, field_id:f.id, signer_role:f.role==="kd"?"customer":"seller",
+    signer_name:f.sig.name, biometric_hash:f.sig.bioHash, user_agent:navigator.userAgent, signed_at:f.sig.signedAt.toISOString() } });
+  await persistDraft().catch(e => console.warn("Zwischenspeichern", e));
   await audit("signed", { field:f.id, role:f.role, name:f.sig.name, bio_sha256:f.sig.bioHash, strokes:f.sig.strokes, points:f.sig.points, input:f.sig.input, consent:f.sig.consent, printed:f.sig.printed, signed_at_client:f.sig.signedAt.toISOString() });
 }
 function trk(id, state, text){ const li = $("#" + id); li.className = state || ""; if (text != null) li.querySelector("small").textContent = text; }
 async function archiveFinal(){
-  trk("tSave", "run", "Wird gespeichert …");
-  try {
-    const path = S.dealId + "/final.pdf";
-    const up = await sb.storage.from("contracts").upload(path, new Blob([S.final], {type:"application/pdf"}), { contentType:"application/pdf", upsert:false });
-    if (up.error) throw up.error;
-    const { error } = await sb.from("deals").update({ final_path:path, final_sha256:S.finalHash, status:"signed", signed_at:new Date().toISOString() }).eq("id", S.dealId);
-    if (error) throw error;
-    await audit("completed", { final_sha256:S.finalHash, pages:S.pageSizes.length + (S.protoPages||1) });
-    trk("tSave", "ok", "Original, Unterschriften und Protokoll gesichert.");
-  } catch(e) { console.error(e); trk("tSave", "err", "Fehlgeschlagen: " + (e.message||e) + ". Bitte PDF zusätzlich speichern."); trk("tSeal", "", "Übersprungen"); trk("tMail", "", "Übersprungen"); return; }
-  await sealContract();
-  sendContract(false);
+  trk("tSave", "run", "Wird gespeichert …"); trk("tSeal", "", "Wartet …"); trk("tMail", "", "Wartet …");
+  // Reihenfolge bleibt erhalten: erst das PDF, dann Siegel, dann Versand. Ohne Internet wird alles automatisch nachgeholt.
+  await enqueue("final", { bytes:S.final, hash:S.finalHash, pages:S.pageSizes.length + (S.protoPages||1) });
+  await enqueue("seal", {});
+  await enqueue("send", {});
 }
-/* Siegel + Zeitstempel (Edge Function seal-contract); bei Fehler geht das unversiegelte PDF raus */
-async function sealContract(){
-  trk("tSeal", "run", "Firmensiegel und Zeitstempel werden angebracht …");
-  try {
-    const { data, error } = await sb.functions.invoke("seal-contract", { body: { deal_id:S.dealId } });
-    if (error){ let msg = error.message; try { msg = (await error.context.json()).error || msg; } catch {} throw new Error(msg); }
-    const dl = await sb.storage.from("contracts").download(S.dealId + "/sealed.pdf");
-    if (!dl.error) S.sealed = new Uint8Array(await dl.data.arrayBuffer());
-    trk("tSeal", "ok", data.timestamped ? "Autowelt Prusseit GmbH · Zeitstempel DigiCert" : "Versiegelt, ohne Zeitstempel (Dienst nicht erreichbar).");
-    $("#sealTx").textContent = fmtDT(new Date()) + (data.timestamped ? " · Zeitstempel DigiCert" : "");
-    $("#sealBadge").classList.add("on");
-    const dd = [...$("#summary").querySelectorAll("dt")].find(d => d.textContent === "Siegel")?.nextElementSibling;
-    if (dd) dd.textContent = short(data.sealed_sha256 || "") + (data.timestamped ? " · Zeitstempel" : "");
-  } catch(e){ console.error(e); trk("tSeal", "err", "Versiegeln fehlgeschlagen: " + (e.message||e) + ". Das unversiegelte PDF liegt im Archiv."); }
+/* Rückmeldungen aus dem Ausgangskorb auf dem Abschluss-Bildschirm anzeigen */
+function finalUi(item, state, res){
+  if (item.deal !== S.dealId || !S.final) return;
+  const id = { final:"tSave", seal:"tSeal", send:"tMail" }[item.op]; if (!id) return;
+  if (state === "wait"){ trk(id, "run", "Kein Internet: wird automatisch nachgeholt, sobald die Verbindung wieder da ist. Du kannst schon weitermachen."); return; }
+  if (state === "run"){ trk(id, "run", item.op==="final" ? "Wird gespeichert …" : item.op==="seal" ? "Firmensiegel und Zeitstempel werden angebracht …" : "Wird verschickt …"); return; }
+  if (item.op === "final"){
+    if (state === "ok") trk("tSave", "ok", "Original, Unterschriften und Protokoll gesichert.");
+    else trk("tSave", "err", "Fehlgeschlagen: " + res + ". Bitte PDF zusätzlich speichern. Es wird weiter versucht.");
+  } else if (item.op === "seal"){
+    if (state === "ok"){
+      trk("tSeal", "ok", res.timestamped ? "Autowelt Prusseit GmbH · Zeitstempel DigiCert" : "Versiegelt, ohne Zeitstempel (Dienst nicht erreichbar).");
+      $("#sealTx").textContent = fmtDT(new Date()) + (res.timestamped ? " · Zeitstempel DigiCert" : "");
+      $("#sealBadge").classList.add("on");
+      const dd = [...$("#summary").querySelectorAll("dt")].find(d => d.textContent === "Siegel")?.nextElementSibling;
+      if (dd) dd.textContent = short(res.sealed_sha256 || "") + (res.timestamped ? " · Zeitstempel" : "");
+      sb.storage.from("contracts").download(item.deal + "/sealed.pdf").then(async dl => { if (!dl.error && item.deal === S.dealId) S.sealed = new Uint8Array(await dl.data.arrayBuffer()); }).catch(() => {});
+    } else trk("tSeal", "err", "Versiegeln fehlgeschlagen: " + res + ". Das unversiegelte PDF liegt im Archiv.");
+  } else if (item.op === "send"){
+    if (state === "ok"){
+      const r = res?.results || {};
+      if (r.mail) trk("tMail", "err", "Mailversand ist noch nicht eingerichtet. Das PDF liegt im Archiv.");
+      else if (S.meta.mail){ S.sent = true; $("#sendMail").textContent = "Erneut senden"; trk("tMail", "ok", "An " + S.meta.mail + ", Antworten gehen an dich."); }
+      else trk("tMail", "", "Keine E-Mail-Adresse. Trag sie unten ein und tippe auf Senden.");
+    } else trk("tMail", "err", "Versand fehlgeschlagen: " + res);
+  }
 }
+
+/* ---------- Ausgangskorb: alles, was gespeichert werden muss, zuerst sicher auf dem Gerät ablegen ----------
+   Unterschriften, Protokolleinträge, Zwischenstände und das fertige PDF landen erst in IndexedDB und werden dann
+   der Reihe nach hochgeladen. Bricht das WLAN ab, geht nichts verloren: Es wird automatisch nachgeholt, auch nach einem Neustart der App. */
+const OB = { db:null, mem:null, busy:false, timer:null, wait:2000, inflight:null, state:"", failed:0, count:0 };
+function obOpen(){
+  if (OB.db) return OB.db;
+  OB.db = new Promise((res, rej) => {
+    try {
+      const r = indexedDB.open("prusseit-sign", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("outbox", { keyPath:"id", autoIncrement:true });
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); r.onblocked = () => rej(new Error("blockiert"));
+    } catch(e){ rej(e); }
+  }).catch(e => { console.warn("IndexedDB nicht verfügbar, Ausgangskorb nur im Speicher", e); OB.mem = OB.mem || []; return null; });
+  return OB.db;
+}
+const obReq = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+async function obStore(mode){ const db = await obOpen(); return db ? db.transaction("outbox", mode).objectStore("outbox") : null; }
+async function obAll(){ const st = await obStore("readonly"); return st ? (await obReq(st.getAll())).sort((a,b) => a.id - b.id) : OB.mem.slice(); }
+async function obPut(item){ const st = await obStore("readwrite"); if (st) return obReq(st.put(item)); const i = OB.mem.findIndex(x => x.id === item.id); if (i >= 0) OB.mem[i] = item; }
+async function obDel(id){ const st = await obStore("readwrite"); if (st) return obReq(st.delete(id)); OB.mem = OB.mem.filter(x => x.id !== id); }
+async function enqueue(op, data, deal = S.dealId){
+  if (!deal || !me) return;
+  const item = { op, deal, user:me.id, at:new Date().toISOString(), tries:0, ...{ data } };
+  try {
+    if (op === "draft") for (const x of await obAll()) if (x.op === "draft" && x.deal === deal && x.id !== OB.inflight) await obDel(x.id); // nur der neueste Zwischenstand zählt
+    const st = await obStore("readwrite");
+    if (st) item.id = await obReq(st.add(item)); else { item.id = (OB.mem.at(-1)?.id || 0) + 1; OB.mem.push(item); }
+  } catch(e){ console.error("Ausgangskorb", e); OB.mem = OB.mem || []; item.id = Date.now(); OB.mem.push(item); }
+  OB.wait = 2000; flush();
+}
+class NetErr extends Error {}
+const errOf = (r, label) => { const m = r.error?.message || String(r.error || ""); const st = r.status ?? r.error?.status ?? r.error?.statusCode ?? r.error?.context?.status;
+  const net = !navigator.onLine || !st || +st === 0 || +st >= 500 || [401,408,429].includes(+st) || /fetch|network|load failed|timed? ?out|abort|offline|ECONN/i.test(m);
+  const e = net ? new NetErr(m) : new Error((label ? label + ": " : "") + m); e.status = st; return e; };
+async function fnCall(name, body){
+  const { data, error } = await sb.functions.invoke(name, { body });
+  if (!error) return data;
+  let msg = error.message, st = error.context?.status; try { msg = (await error.context.json()).error || msg; } catch {}
+  throw errOf({ error:{ message:msg }, status: error.name === "FunctionsHttpError" ? st : 0 });
+}
+const OPS = {
+  async lock(it){ const r = await sb.from("deals").update({ fields:it.data.fields, locked_at:it.data.at, status:"signing" }).eq("id", it.deal);
+    if (r.error && !/gesperrt/i.test(r.error.message)) throw errOf(r, "Sperren"); },
+  async sig(it){ const r = await sb.from("signatures").insert(it.data.row); if (r.error && r.error.code !== "23505") throw errOf(r, "Unterschrift"); },
+  async audit(it){ const r = await sb.from("audit_events").insert({ deal_id:it.deal, event:it.data.event, details:{ ...it.data.details, uploaded_late: Date.now() - Date.parse(it.at) > 60000 || undefined } }); if (r.error) throw errOf(r, "Protokoll"); },
+  async draft(it){ const r = await sb.from("deals").update({ draft:it.data.draft }).eq("id", it.deal); if (r.error) throw errOf(r, "Zwischenstand"); },
+  async final(it){
+    const path = it.deal + "/final.pdf";
+    const up = await sb.storage.from("contracts").upload(path, new Blob([it.data.bytes], {type:"application/pdf"}), { contentType:"application/pdf", upsert:false });
+    if (up.error && !/exists|duplicate/i.test(up.error.message) && String(up.error.statusCode) !== "409") throw errOf(up, "PDF hochladen");
+    const u = await sb.from("deals").update({ final_path:path, final_sha256:it.data.hash, status:"signed", signed_at:it.at }).eq("id", it.deal);
+    if (u.error) throw errOf(u, "Archiv");
+    const a = await sb.from("audit_events").insert({ deal_id:it.deal, event:"completed", details:{ final_sha256:it.data.hash, pages:it.data.pages, client_time:it.at, ua:navigator.userAgent } });
+    if (a.error) throw errOf(a, "Protokoll");
+  },
+  seal: it => fnCall("seal-contract", { deal_id:it.deal }),
+  send: it => fnCall("send-contract", { deal_id:it.deal, resend:false }),
+  ready: it => fnCall("remote-sign", { action:"ready", deal_id:it.deal }),
+};
+// Diese Schritte dürfen bei einem echten Fehler übersprungen werden, ohne dass Daten fehlen (das PDF ist dann schon im Archiv)
+const SOFT = new Set(["seal","send","ready"]);
+async function flush(){
+  if (!me) return;
+  if (OB.busy){ OB.again = true; return; } // läuft schon: danach sofort noch eine Runde für neu hinzugekommene Einträge
+  OB.busy = true; OB.again = false; clearTimeout(OB.timer);
+  let waiting = false;
+  try {
+    const blocked = new Set();
+    for (const it of await obAll()){
+      if (it.user !== me.id || blocked.has(it.deal)) continue;
+      if (it.failed){ blocked.add(it.deal); continue; }
+      if (!navigator.onLine){ waiting = true; finalUi(it, "wait"); break; }
+      OB.inflight = it.id; obUi("sync"); finalUi(it, "run");
+      try {
+        const res = await OPS[it.op](it);
+        await obDel(it.id); finalUi(it, "ok", res);
+       
+      } catch(e){
+        if (e instanceof NetErr){
+          waiting = true; finalUi(it, "wait");
+          if (+e.status === 401) await sb.auth.refreshSession().catch(() => {});
+          break;
+        }
+        console.error("Ausgangskorb", it.op, e);
+        it.tries = (it.tries || 0) + 1; it.error = e.message;
+        if (SOFT.has(it.op)){ await obDel(it.id); finalUi(it, "err", e.message); continue; }
+        if (it.tries >= 4){ it.failed = true; finalUi(it, "err", e.message); }
+        await obPut(it); blocked.add(it.deal); waiting = true;
+      }
+    }
+  } catch(e){ console.error("Ausgangskorb", e); waiting = true; }
+  finally { OB.inflight = null; OB.busy = false; }
+  await obUi();
+  if (waiting) for (const x of await obAll().catch(() => [])) if (!x.failed && ["final","seal","send"].includes(x.op)) finalUi(x, "wait");
+  if (waiting){ OB.timer = setTimeout(flush, OB.wait); OB.wait = Math.min(OB.wait * 2, 30000); }
+  else if (OB.again) setTimeout(flush, 0);
+}
+async function obUi(mode){
+  const b = $("#netBadge"); if (!b || !me) return;
+  if (mode === "sync"){ b.hidden = false; b.className = "net sync"; b.textContent = "Wird gespeichert …"; return; }
+  const mine = (await obAll().catch(() => [])).filter(x => x.user === me.id);
+  OB.count = mine.length; OB.failed = mine.filter(x => x.failed).length;
+  b.hidden = !mine.length;
+  if (!mine.length) return;
+  if (OB.failed){ b.className = "net err"; b.textContent = "Speichern hängt · Details"; }
+  else if (!navigator.onLine){ b.className = "net off"; b.textContent = "Offline · Unterschriften sicher auf dem iPad"; }
+  else { b.className = "net off"; b.textContent = "Verbindung schwach · wird nachgeladen"; }
+}
+// Warten, bis alle Einträge eines Vorgangs hochgeladen sind (für Schritte, die sofort Internet brauchen)
+async function obDrain(deal, ms = 25000){
+  const t0 = Date.now();
+  for (;;){
+    const left = (await obAll()).filter(x => x.deal === deal && x.user === me?.id);
+    if (!left.length) return;
+    if (left.some(x => x.failed)) throw new Error("Einige Daten dieses Vorgangs konnten nicht gespeichert werden. Bitte oben auf den roten Hinweis tippen.");
+    if (Date.now() - t0 > ms) throw new Error("Die Internetverbindung ist zu schwach. Deine Unterschriften sind sicher gespeichert, bitte gleich noch einmal versuchen.");
+    OB.wait = 2000; flush(); await new Promise(r => setTimeout(r, 700));
+  }
+}
+window.addEventListener("online", () => { OB.wait = 2000; flush(); });
+window.addEventListener("offline", () => obUi());
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { OB.wait = 2000; flush(); } });
+window.addEventListener("beforeunload", e => { if (OB.mem?.length){ e.preventDefault(); e.returnValue = ""; } });
+document.addEventListener("click", async e => {
+  if (!e.target.closest("#netBadge")) return;
+  const mine = (await obAll()).filter(x => x.user === me?.id);
+  const fail = mine.filter(x => x.failed);
+  const msg = fail.length
+    ? "Diese Einträge konnten auch nach mehreren Versuchen nicht gespeichert werden:\n\n" + fail.map(x => "· " + x.op + ": " + (x.error || "")).join("\n") + "\n\nSie bleiben auf diesem Gerät gesichert. Jetzt erneut versuchen?"
+    : mine.length + " Einträge sind sicher auf diesem Gerät gespeichert und werden automatisch hochgeladen, sobald die Verbindung steht. Jetzt erneut versuchen?";
+  if (confirm(msg)){ for (const x of fail){ x.failed = false; x.tries = 0; await obPut(x); } OB.wait = 2000; flush(); }
+});
+
 
 /* Kaufvertrag + Anlagen wählen, dann zu einem Dokument zusammenfügen */
 S.kv = null; S.atts = [];
@@ -1331,6 +1480,7 @@ async function sendRemote(){
   $("#handGo").disabled = true; $("#handGoTx").textContent = "Wird gesendet …"; $("#handBack").hidden = true;
   try {
     await lockDeal();
+    await obDrain(S.dealId); // erst alles Gespeicherte hochladen, sonst überschreibt es später den Status „Link verschickt“
     const fields = S.fields.map(f => ({ ...f, sig: f.sig ? { ...f.sig, signedAt: f.sig.signedAt.toISOString() } : null }));
     const { error } = await sb.functions.invoke("remote-sign", { body: { action:"create", deal_id:S.dealId, email,
       payload: { fields, meta:{ ...S.meta, mail:email }, parts:S.parts || null, fileName:S.fileName, origHash:S.origHash, sellerEmail:me.email } } });
@@ -1659,7 +1809,11 @@ $("#authGo").addEventListener("click", async () => {
   finally { b.disabled = false; }
 });
 $("#authPw").addEventListener("keydown", e => { if (e.key==="Enter") $("#authGo").click(); });
-$("#logout").addEventListener("click", async () => { await sb.auth.signOut(); });
+$("#logout").addEventListener("click", async () => {
+  const n = (await obAll().catch(() => [])).filter(x => x.user === me?.id).length;
+  if (n && !confirm(n + " Einträge (z. B. Unterschriften) sind noch nicht hochgeladen, weil die Verbindung fehlt. Sie bleiben auf diesem iPad gesichert und werden hochgeladen, sobald du dich wieder anmeldest. Trotzdem abmelden?")) return;
+  await sb.auth.signOut();
+});
 
 async function onSession(session){
   if (REMOTE) return;
@@ -1673,6 +1827,9 @@ async function onSession(session){
   $("#mVk").value = me.full_name || me.email;
   $("#navDash").hidden = me.role !== "admin";
   resetDeal(); go(1);
+  OB.wait = 2000; flush();
+  pushState().catch(() => {});
+  if (OPEN_ID){ const id = OPEN_ID; OPEN_ID = null; openFromPush(id); }
 }
 sb.auth.onAuthStateChange((_ev, session) => { setTimeout(() => onSession(session), 0); });
 
@@ -1738,11 +1895,14 @@ $("#archQ").addEventListener("input", renderArchive);
 /* ---------- Push „Fahrzeug verkauft“ (für Admins) ---------- */
 const VAPID_PUBLIC = "BL2pqdwCpn4ZuBjFonRhHZDgTUa0jUi2OBy6jI_A0Xx8GHqesg0CTikP2ZgH8JXF3ilVBqv_DYbMFZiqpjQapxc";
 const pushOk = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const DEVICE = SIGN_DEVICE ? "tablet" : "pc";
 async function pushState(){
   const b = $("#pushBtn"); b.hidden = !me;
   if (b.hidden) return;
   if (!pushOk()){ b.textContent = "Push: auf dem iPad erst „Zum Home-Bildschirm“"; b.disabled = true; return; }
   const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription();
+  // Gemeinsam genutztes iPad: Mitteilungen gehen immer an den, der gerade angemeldet ist
+  if (sub && Notification.permission==="granted"){ const j = sub.toJSON(); sb.from("push_subscriptions").upsert({ user_id:me.id, endpoint:j.endpoint, keys:j.keys, device:DEVICE }, { onConflict:"endpoint" }).then(() => {}, () => {}); }
   b.disabled = false; b.textContent = sub && Notification.permission==="granted" ? "Push ist aktiv ✓" : (me.role==="admin" ? "Push bei Verkauf aktivieren" : "Push-Mitteilungen aktivieren");
 }
 $("#pushBtn").addEventListener("click", async () => {
@@ -1753,9 +1913,9 @@ $("#pushBtn").addEventListener("click", async () => {
     const key = Uint8Array.from(atob(VAPID_PUBLIC.replace(/-/g,"+").replace(/_/g,"/")), c => c.charCodeAt(0));
     const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:key });
     const j = sub.toJSON();
-    const { error } = await sb.from("push_subscriptions").upsert({ user_id:me.id, endpoint:j.endpoint, keys:j.keys }, { onConflict:"endpoint" });
+    const { error } = await sb.from("push_subscriptions").upsert({ user_id:me.id, endpoint:j.endpoint, keys:j.keys, device:DEVICE }, { onConflict:"endpoint" });
     if (error) throw error;
-    m.textContent = me.role==="admin" ? "Fertig. Du bekommst auf diesem Gerät eine Nachricht, sobald ein Vertrag unterschrieben ist." : "Fertig. Du bekommst auf diesem Gerät eine Nachricht, sobald ein Kunde per Link unterschrieben hat.";
+    m.textContent = "Fertig. Du bekommst auf diesem Gerät Mitteilungen" + (SIGN_DEVICE ? ", sobald ein Vertrag vom PC bereitsteht," : "") + (me.role==="admin" ? " bei jedem Verkauf" : "") + " und wenn ein Kunde per Link unterschrieben hat.";
   } catch(e){ m.classList.add("err"); m.textContent = "Push konnte nicht aktiviert werden: " + (e.message||e); }
   pushState();
 });
@@ -1786,8 +1946,10 @@ function metaFrom(r, d){
 }
 async function resumeDeal(r, toSign){
   try {
-    const bytes = await loadOriginal(r.original_path), d = r.draft || null;
-    const signing = !!r.locked_at || r.status === "signing";
+    // Noch nicht hochgeladene Stände auf diesem Gerät haben Vorrang (z. B. Unterschriften bei schwachem WLAN)
+    const pend = (await obAll().catch(() => [])).filter(x => x.deal === r.id);
+    const bytes = await loadOriginal(r.original_path), d = pend.filter(x => x.op === "draft").at(-1)?.data.draft || r.draft || null;
+    const signing = !!r.locked_at || r.status === "signing" || pend.some(x => x.op === "lock");
     if (signing && !SIGN_DEVICE) throw new Error("Dieser Vorgang ist schon in der Unterschrift und kann nur am iPad fortgesetzt werden.");
     resetDeal();
     S.meta = metaFrom(r, d); S.parts = d?.parts || null; fillMeta();
@@ -1844,8 +2006,9 @@ $("#saveDraft").addEventListener("click", async () => {
     clearTimeout(S.saveT);
     await persistDraft({ ready:true });
     await audit("draft_saved", { fields:S.fields.length, device:SIGN_DEVICE ? "tablet" : "pc" });
-    const who = S.meta.kunde; resetDeal(); go(1);
-    showInfo(SIGN_DEVICE ? "Gespeichert" : "Ans iPad geschickt", SIGN_DEVICE ? "Der Vertrag für " + who + " ist gespeichert. Du findest ihn auf dem Startbildschirm unter „Bereit zur Unterschrift“." : "Der Vertrag für " + who + " ist gespeichert. Öffne Prusseit Sign auf dem iPad: Er steht dort ganz oben unter „Bereit zur Unterschrift“.", { btn:"Neuer Vorgang", action:() => { hideHand(); go(1); } });
+    if (!SIGN_DEVICE) await enqueue("ready", {});
+    const who = S.meta.kunde, off = !navigator.onLine; resetDeal(); go(1);
+    showInfo(SIGN_DEVICE ? "Gespeichert" : "Ans iPad geschickt", (SIGN_DEVICE ? "Der Vertrag für " + who + " ist gespeichert. Du findest ihn auf dem Startbildschirm unter „Bereit zur Unterschrift“." : "Der Vertrag für " + who + " ist gespeichert. Das iPad bekommt eine Mitteilung, und der Vertrag steht dort ganz oben unter „Bereit zur Unterschrift“.") + (off ? " Gerade ist kein Internet da: Er wird automatisch übertragen, sobald die Verbindung wieder steht." : ""), { btn:"Neuer Vorgang", action:() => { hideHand(); go(1); } });
   } catch(e){ console.error(e); alert("Der Entwurf konnte nicht gespeichert werden: " + (e.message||e)); }
   finally { b.disabled = false; }
 });
@@ -1888,6 +2051,20 @@ async function loadReady(){
   readyTimer = setTimeout(function tick(){ if (here() && !document.hidden) loadReady(); else readyTimer = setTimeout(tick, 20000); }, 20000);
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && me && (!$("#s1").hidden || !$("#s4").hidden)) loadReady(); });
+
+/* ---------- Mitteilung „Vertrag bereit“ angetippt: Vertrag direkt öffnen ---------- */
+async function openFromPush(id){
+  if (!me || !/^[0-9a-f-]{36}$/i.test(id)) return;
+  if (S.orig && !S.final && (S.step===2 || S.step===3)){ loadReady(); return; } // mitten in einem Vorgang: nicht herausreißen, steht in der Liste
+  const { data:r, error } = await sb.from("deals").select("id,contract_no,vehicle,customer_name,customer_email,status,created_at,updated_at,original_path,draft,fields,locked_at,final_path,profiles(full_name,email)").eq("id", id).single();
+  if (error || !r || r.final_path || !["draft","signing"].includes(r.status)){ loadReady(); return; }
+  if (SIGN_DEVICE) resumeDeal(r, true); else loadReady();
+}
+if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => {
+  const d = e.data || {};
+  if (d.type === "open" && d.deal) openFromPush(d.deal);
+  if (d.type === "push" && d.kind === "ready" && me) loadReady();
+});
 
 /* ---------- Per Link unterschrieben: im Archiv abschließen ---------- */
 async function completeRemote(r){
@@ -2019,5 +2196,6 @@ if (REMOTE) startRemote(); else showAuth();
 })();
 </script>
 
+<button class="net" id="netBadge" hidden></button>
 </body>
 </html>

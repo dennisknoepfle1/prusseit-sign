@@ -41,15 +41,18 @@ async function request(token: unknown) {
 const audit = (deal_id: string, event: string, details: Record<string, unknown>) =>
   admin.from("audit_events").insert({ deal_id, event, details });
 
-async function pushTo(userIds: string[], title: string, body: string) {
+// device: nur Geräte dieser Art ("tablet"); ältere Anmeldungen ohne Gerätetyp bekommen die Nachricht auch
+async function pushTo(userIds: string[], title: string, body: string, opt: { url?: string; device?: string; kind?: string } = {}) {
   const { data: keys } = await admin.from("app_secrets").select("name,value").in("name", ["vapid_public", "vapid_private"]);
   const k = Object.fromEntries((keys ?? []).map(r => [r.name, r.value]));
   if (!k.vapid_public || !k.vapid_private || !userIds.length) return 0;
   webpush.setVapidDetails("mailto:vertrag@prusseit-sign.de", k.vapid_public, k.vapid_private);
-  const { data: subs } = await admin.from("push_subscriptions").select("id,endpoint,keys").in("user_id", userIds);
+  let q = admin.from("push_subscriptions").select("id,endpoint,keys,device").in("user_id", userIds);
+  if (opt.device) q = q.or(`device.eq.${opt.device},device.is.null`);
+  const { data: subs } = await q;
   let sent = 0;
   for (const s of subs ?? []) {
-    try { await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, JSON.stringify({ title, body, url: APP_URL })); sent++; }
+    try { await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, JSON.stringify({ title, body, url: opt.url ?? APP_URL, kind: opt.kind, tag: opt.kind })); sent++; }
     catch (e) { const c = (e as { statusCode?: number }).statusCode; if (c === 410 || c === 404) await admin.from("push_subscriptions").delete().eq("id", s.id); }
   }
   return sent;
@@ -62,6 +65,20 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || null;
     const ua = req.headers.get("user-agent") ?? null;
+
+    // Am PC fertig vorbereitet: iPad des Verkäufers benachrichtigen
+    if (body.action === "ready") {
+      const user = createClient(SB_URL, ANON, { global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } } });
+      const { data: u } = await user.auth.getUser();
+      if (!u?.user) return json({ error: "Nicht angemeldet" }, 401);
+      const { data: deal, error } = await user.from("deals").select("id,contract_no,vehicle,customer_name,final_path,seller_id").eq("id", body.deal_id).single();
+      if (error || !deal) return json({ error: "Vorgang nicht gefunden" }, 404);
+      if (deal.final_path) return json({ ok: true, push: 0 });
+      const push = await pushTo([deal.seller_id], "Vertrag bereit zur Unterschrift",
+        [deal.customer_name, deal.vehicle || deal.contract_no].filter(Boolean).join(" · "),
+        { url: APP_URL + "?open=" + deal.id, device: "tablet", kind: "ready" });
+      return json({ ok: true, push });
+    }
 
     if (body.action === "create") {
       const user = createClient(SB_URL, ANON, { global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } } });
