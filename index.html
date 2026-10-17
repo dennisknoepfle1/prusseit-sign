@@ -196,6 +196,14 @@ p{margin:0}
 .docrow.ok{border-style:solid;border-color:color-mix(in srgb,var(--ok) 45%,transparent);background:var(--ok-soft)}
 .docrow.ok .hint{color:var(--ok)}
 .txtfield.opt{border-style:dotted;background:rgba(59,91,169,.04)}
+/* Textfelder: Verschieben/Entfernen/Größe nur am gerade bearbeiteten Feld, klein, damit der Text sichtbar bleibt */
+.txtfield > .grip,.txtfield > .x,.txtfield > .rs{opacity:0;pointer-events:none;transition:opacity .15s}
+.txtfield.act > .grip,.txtfield.act > .x,.txtfield.act > .rs,.txtfield.dragging > .grip{opacity:1;pointer-events:auto}
+@media (hover:hover){.txtfield:hover > .grip,.txtfield:hover > .x,.txtfield:hover > .rs{opacity:1;pointer-events:auto}}
+.txtfield > .grip{top:-22px;width:20px;height:20px;font-size:11px;border-radius:5px}
+.txtfield > .x{top:-22px;left:23px;width:20px;height:20px;font-size:12px}
+.txtfield > .rs{right:-9px;bottom:-9px;width:16px;height:16px;border-width:1.5px}
+.txtfield.act{box-shadow:0 0 0 2px rgba(59,91,169,.35);z-index:4}
 .btn.on{outline:3px solid var(--red);outline-offset:1px}
 .toast.busy::after{content:"";display:inline-block;width:12px;height:12px;margin-left:8px;vertical-align:-1px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -794,6 +802,10 @@ async function detectFields(bytes, pageCount){
         const role = vkAlone || /Verkäufer/i.test(m[2]) ? "vk" : "kd";
         const xMark = sameLine(it, /^X$/);
         if (xMark) sig(role, xMark.x + 8, it.y - 32, 200, 44);              // Tabellenzeile: rechts neben dem X
+        if (xMark && /Verbraucher/i.test(m?.[2] || "") && it.y - 80 > 60){   // dort steht keine Verkäufer-Zeile: eigene Zeile darunter
+          const n0 = out.length; sig("vk", xMark.x + 8, it.y - 80, 200, 44);
+          if (out.length > n0) Object.assign(out[n0], { caption:"Unterschrift Verkäufer", capX:it.x/W });
+        }
         else if (m && m[3]) sig(role, it.x + it.w + 6, it.y - 4, 180, 44);  // „Unterschrift Kunde: ____“
         else if (m && m[1]) sig(role, it.x - 40, it.y + 12, 260, 45);       // „X Unterschrift Kunde“ unter langer Linie
         else sig(role, it.x, it.y + 12, Math.max(165, it.w + 90), 45);     // Bezeichnung unter der Linie
@@ -948,7 +960,7 @@ async function createDeal(bytes){
   if (u.error) throw u.error;
   await audit("created", { file:S.fileName, sha256:S.origHash, pages, parts:S.parts || null });
 }
-const fieldGeo = () => S.fields.map(({id,kind,role,page,x,y,w,h,value,formName,label}) => ({id,kind:kind||"sig",role,page,x,y,w,h,value,formName,label}));
+const fieldGeo = () => S.fields.map(({id,kind,role,page,x,y,w,h,value,formName,label,caption,capX}) => ({id,kind:kind||"sig",role,page,x,y,w,h,value,formName,label,caption,capX}));
 /* Stand des Vorgangs sichern: Felder, Werte und bereits geleistete Unterschriften. So lässt sich ein abgebrochener Vorgang fortsetzen. */
 const sigOut = g => g ? { ...g, signedAt: g.signedAt.toISOString(), raw: undefined } : null;
 async function persistDraft(extra = {}){
@@ -1190,6 +1202,7 @@ function resizer(d, f, wrap){
   });
   return h;
 }
+document.addEventListener("pointerdown", e => { if (S.actField && !e.target.closest(".txtfield")){ S.actField = null; document.querySelectorAll("#viewer .txtfield.act").forEach(n => n.classList.remove("act")); } }, true);
 function drawFields(){
   document.querySelectorAll("#viewer .sigfield, #viewer .txtfield, #viewer .chkfield").forEach(n => n.remove());
   S.fields.forEach(f => {
@@ -1203,10 +1216,11 @@ function drawFields(){
         d.className = "chkfield"; d.textContent = f.value ? "✕" : "";
         if (S.step===2){ d.title = "Tippen zum Umschalten, ziehen zum Verschieben"; d.classList.add("drag"); dragFrom(d, d, f, wrap, () => { f.value = !f.value; drawFields(); updateLists(); }); d.append(removeBtn(f), resizer(d, f, wrap)); }
       } else {
-        d.className = "txtfield" + (f.optional ? " opt" : "") + (!f.value && !f.optional && S.step===2 ? " empty" : "");
+        d.className = "txtfield" + (f.optional ? " opt" : "") + (!f.value && !f.optional && S.step===2 ? " empty" : "") + (S.step===2 && S.actField===f.id ? " act" : "");
         if (S.step===2){
           const inp = document.createElement("input"); inp.value = f.value || ""; inp.setAttribute("aria-label", f.label || "Textfeld");
           inp.addEventListener("click", ev => ev.stopPropagation());
+          inp.addEventListener("focus", () => { S.actField = f.id; document.querySelectorAll("#viewer .txtfield.act").forEach(n => n!==d && n.classList.remove("act")); d.classList.add("act"); });
           inp.addEventListener("input", () => {
             f.value = inp.value; d.classList.toggle("empty", !f.value && !f.optional);
             if (!f.formName){ // eigenes Textfeld wächst mit dem Text bis zum Seitenrand
@@ -1385,7 +1399,8 @@ function openPad(f){
   active = f; strokes = []; cur = null; openedAt = performance.now();
   const n = nameFor(f.role);
   $("#padTitle").textContent = "Unterschrift " + ROLE[f.role];
-  $("#padSub").textContent = n + " · Vorgang " + S.meta.vorgang + " · Fingerabdruck " + short(S.origHash);
+  const vkOpen = f.role==="vk" ? S.fields.filter(g => isSig(g) && g.role==="vk" && !g.sig).length : 0;
+  $("#padSub").textContent = n + " · Vorgang " + S.meta.vorgang + " · Fingerabdruck " + short(S.origHash) + (vkOpen > 1 ? " · Diese Unterschrift wird für alle " + vkOpen + " Verkäufer-Felder übernommen." : "");
   const firstKd = !S.fields.some(g => isSig(g) && g.role==="kd" && g.sig);
   $("#consentRow").hidden = !(f.role==="kd" && firstKd); $("#consent").checked = false;
   $("#nameRow").hidden = f.role!=="kd"; $("#printName").value = f.role==="kd" ? (S.printName || nameFor("kd").toLocaleUpperCase("de-DE")) : "";
@@ -1414,9 +1429,16 @@ $("#padOk").addEventListener("click", async () => {
     raw: REMOTE ? strokes.map(s => s.slice()) : undefined,
   };
   if (active.role==="kd") S.printName = active.sig.printed;
+  // Verkäufer unterschreibt einmal, die Unterschrift gilt für alle seine Felder (beim Käufer jedes Feld einzeln)
+  const also = active.role==="vk" ? S.fields.filter(g => isSig(g) && g.role==="vk" && !g.sig && g!==active) : [];
+  if (also.length){
+    const pgs = [active, ...also].map(g => g.page+1).sort((a,b) => a-b);
+    active.sig.shared = pgs;
+    also.forEach(g => { g.sig = { ...active.sig }; });
+  }
   S.locked = true; S.fresh = active_f.id; closePad(); go(3); S.fresh = null;
   const next = S.fields.find(g => isSig(g) && !g.sig && g.role===S.phase); if (next) setTimeout(() => jumpTo(next), 900);
-  try { await recordSignature(active_f); }
+  try { await recordSignature(active_f); for (const g of also) await recordSignature(g); }
   catch(e) { console.error(e); alert("Die Unterschrift ist im Dokument, konnte aber nicht im Archiv protokolliert werden: " + (e.message||e)); }
 });
 
@@ -1473,6 +1495,10 @@ async function finishDeal(){
     pg.drawText(nm, {x:x+2, y:y+bh-1-s1, size:s1, font:fb, color:ink});
     pg.drawText(ts, {x:x+2, y:y+bh-2-s1-s2, size:s2, font:f, color:grey});
     pg.drawImage(png, {x, y:y+bh*0.04, width:bw, height:Math.max(bh*0.4, bh-head-bh*0.04)});
+    if (fl.caption){ // im Vertrag fehlt die Bezeichnung: links daneben eintragen, Linie unter dem Feld
+      pg.drawText(winAnsi(fl.caption), {x:(fl.capX ?? fl.x-0.3)*W, y:y+bh/2-3, size:9.5, font:f, color:ink});
+      pg.drawLine({start:{x, y:y-1}, end:{x:x+bw, y:y-1}, thickness:.8, color:ink});
+    }
   }
   // Prüfprotokoll (bei Bedarf über mehrere Seiten)
   const proto = []; let p, y;
@@ -1502,6 +1528,7 @@ async function finishDeal(){
     row("Name", s.name); if (s.printed) row("Name in Druckbuchstaben", s.printed + (fl.role==="kd" ? " (vom Kunden bestätigt)" : "")); row("Zeitpunkt", fmtDT(s.signedAt)); row("Eingabe", s.input + (s.pressure ? ", mit Druckdaten" : ", ohne Druckdaten"));
     row("Schreibdynamik", s.strokes + " Striche, " + s.points + " Messpunkte, " + (s.durationMs/1000).toFixed(1).replace(".",",") + " s");
     row("Biometrie SHA-256", s.bioHash, true);
+    if (s.shared) row("Verwendung", "Einmal geleistet und vom Verkäufer für alle " + s.shared.length + " Verkäufer-Felder übernommen (Seite " + s.shared.join(", ") + ").");
     if (s.remote){
       row("Unterzeichnet", "auf eigenem Gerät über einen persönlichen Link, der an " + s.email + " gesendet wurde" + (s.ip ? " · IP " + s.ip : ""));
       row("Beim Server eingegangen", fmtDT(new Date(s.receivedAt)));
