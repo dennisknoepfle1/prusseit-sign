@@ -288,6 +288,7 @@ p{margin:0}
 .barbtn{border:1px solid #2e292b;background:transparent;color:var(--bar-fg);border-radius:999px;padding:8px 15px;font-size:14px;font-weight:500;cursor:pointer;transition:background .2s,border-color .2s}
 .barbtn:hover{background:#1d191b}
 .barbtn[aria-current="page"]{background:var(--red);border-color:var(--red)}
+.brand{cursor:pointer}
 .av-sm{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--red);color:#fff;font-family:var(--f-display);font-weight:700;font-size:13px}
 body.authing{background:#070606}
 body.authing .bar{display:none}
@@ -395,6 +396,7 @@ body.customer .steps,body.customer .user{visibility:hidden}
       <button class="step" data-go="4" id="nav4" disabled><i>4</i><span>Abschluss</span></button>
     </nav>
     <div class="user" id="userBar" hidden>
+      <button class="barbtn" id="navHome" hidden>Start</button>
       <button class="barbtn" id="navDash" hidden>Dashboard</button>
       <button class="barbtn" id="navArch">Archiv</button>
       <span class="av-sm" id="userAv" aria-hidden="true"></span><span class="uname"><b id="userName"></b></span>
@@ -652,6 +654,7 @@ function go(n, force){
   if (n===3 && !SIGN_DEVICE && !REMOTE) n = 2;
   const prev = S.step, wasHidden = [$("#s1"),$("#s2"),$("#s4")].every(x => x.hidden);
   S.step = n; S.maxStep = Math.max(S.maxStep, n);
+  $("#navHome").hidden = true;
   $("#s0").hidden = true; $("#sA").hidden = true; $("#sD").hidden = true; $("#navArch").removeAttribute("aria-current"); $("#navDash").removeAttribute("aria-current"); document.querySelector(".steps").hidden = false;
   $("#s1").hidden = n!==1; $("#s2").hidden = !(n===2||n===3); $("#s4").hidden = n!==4;
   for (let i=1;i<=4;i++){
@@ -1643,7 +1646,7 @@ const STATUS = { draft:"Entwurf", signing:"in Unterschrift", remote:"Link versch
 let archRows = [];
 async function showArchive(){
   ["#s0","#s1","#s2","#s4","#sD"].forEach(q => $(q).hidden = true); $("#navDash").removeAttribute("aria-current");
-  document.querySelector(".steps").hidden = true; $("#sA").hidden = false; $("#navArch").setAttribute("aria-current","page"); animate($("#sA"));
+  document.querySelector(".steps").hidden = true; $("#sA").hidden = false; $("#navArch").setAttribute("aria-current","page"); animate($("#sA")); $("#navHome").hidden = false;
   $("#archLede").textContent = me.role==="admin" ? "Alle Vorgänge aller Verkäufer." : "Deine Vorgänge.";
   const list = $("#archList"); list.innerHTML = '<p class="empty">Wird geladen …</p>';
   const { data, error } = await sb.from("deals").select("id,contract_no,vehicle,customer_name,customer_email,status,created_at,updated_at,signed_at,locked_at,final_path,sealed_path,original_path,draft,fields,profiles(full_name,email)").order("created_at", { ascending:false }).limit(500);
@@ -1726,6 +1729,13 @@ $("#navArch").addEventListener("click", () => {
   showArchive();
 });
 $("#archBack").addEventListener("click", () => { resetDeal(); go(1); });
+function goHome(){
+  if (!me || REMOTE || document.body.classList.contains("customer")) return;
+  if (S.orig && !S.final && !$("#s2").hidden && !confirm("Zur Startseite? Der aktuelle Vorgang ist gespeichert und lässt sich im Archiv unter „Offen“ fortsetzen.")) return;
+  resetDeal(); go(1);
+}
+$("#navHome").addEventListener("click", goHome);
+document.querySelector(".brand").addEventListener("click", goHome);
 
 /* ---------- Bestehenden Vorgang öffnen (Entwurf) ---------- */
 async function loadOriginal(path){
@@ -1901,7 +1911,7 @@ const weekStart = d => { const x = new Date(d); x.setHours(0,0,0,0); x.setDate(x
 async function showDash(quiet){
   if (!quiet){
     ["#s0","#s1","#s2","#s4","#sA"].forEach(q => $(q).hidden = true); $("#navArch").removeAttribute("aria-current");
-    document.querySelector(".steps").hidden = true; $("#sD").hidden = false; $("#navDash").setAttribute("aria-current","page"); animate($("#sD"));
+    document.querySelector(".steps").hidden = true; $("#sD").hidden = false; $("#navDash").setAttribute("aria-current","page"); animate($("#sD")); $("#navHome").hidden = false;
     window.scrollTo({top:0, behavior:"instant"});
   }
   const { data, error } = await sb.from("deals").select("id,status,customer_name,vehicle,contract_no,created_at,updated_at,signed_at,seller_id,draft,locked_at,profiles(full_name,email)").order("created_at", { ascending:false }).limit(3000);
