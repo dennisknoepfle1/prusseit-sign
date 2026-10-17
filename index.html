@@ -222,6 +222,9 @@ p{margin:0}
 .toast.err{background:var(--red-soft);color:var(--red-ink)}
 .net{position:fixed;left:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:15;border:0;border-radius:999px;padding:11px 16px;font:600 14px/1 inherit;font-family:inherit;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:8px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
 body.customer .net,body.authing .net{display:none}
+.jump-note{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 76px);transform:translateX(-50%);z-index:15;max-width:min(680px,calc(100vw - 32px));background:var(--red);color:#fff;border-radius:14px;padding:14px 20px;font-size:15px;line-height:1.35;box-shadow:0 10px 30px rgba(227,0,27,.35)}
+.jump-note.show{animation:jumpIn .45s cubic-bezier(.2,.9,.3,1.2)}@keyframes jumpIn{from{opacity:0;transform:translate(-50%,-14px) scale(.96)}}
+body.customer .jump-note{display:none}
 .net::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
 .net.off{background:#3a2e10;color:#ffc94d}.net.sync{background:#13243f;color:#8fb6ff}.net.err{background:#4a0d14;color:#ff8a95}
 .net.sync::before{animation:netp 1s ease-in-out infinite}@keyframes netp{50%{opacity:.25}}
@@ -1828,7 +1831,7 @@ async function onSession(session){
   $("#navDash").hidden = me.role !== "admin";
   resetDeal(); go(1);
   OB.wait = 2000; flush();
-  pushState().catch(() => {});
+  pushState().catch(() => {}); watchReady();
   if (OPEN_ID){ const id = OPEN_ID; OPEN_ID = null; openFromPush(id); }
 }
 sb.auth.onAuthStateChange((_ev, session) => { setTimeout(() => onSession(session), 0); });
@@ -2004,7 +2007,7 @@ $("#saveDraft").addEventListener("click", async () => {
   const b = $("#saveDraft"); b.disabled = true;
   try {
     clearTimeout(S.saveT);
-    await persistDraft({ ready:true });
+    await persistDraft(SIGN_DEVICE ? { ready:true } : { ready:true, sent_at:new Date().toISOString() });
     await audit("draft_saved", { fields:S.fields.length, device:SIGN_DEVICE ? "tablet" : "pc" });
     if (!SIGN_DEVICE) await enqueue("ready", {});
     const who = S.meta.kunde, off = !navigator.onLine; resetDeal(); go(1);
@@ -2050,20 +2053,54 @@ async function loadReady(){
   const here = () => !$("#s1").hidden || !$("#s4").hidden;
   readyTimer = setTimeout(function tick(){ if (here() && !document.hidden) loadReady(); else readyTimer = setTimeout(tick, 20000); }, 20000);
 }
-document.addEventListener("visibilitychange", () => { if (!document.hidden && me && (!$("#s1").hidden || !$("#s4").hidden)) loadReady(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && me && (!$("#s1").hidden || !$("#s4").hidden)) loadReady(); if (!document.hidden && me) watchReady(); });
 
 /* ---------- Mitteilung „Vertrag bereit“ angetippt: Vertrag direkt öffnen ---------- */
 async function openFromPush(id){
   if (!me || !/^[0-9a-f-]{36}$/i.test(id)) return;
-  if (S.orig && !S.final && (S.step===2 || S.step===3)){ loadReady(); return; } // mitten in einem Vorgang: nicht herausreißen, steht in der Liste
+  if (signBusy()){ JUMP.pending = id; jumpNote(); return; } // Kunde unterschreibt gerade: danach öffnen
+  if (S.orig && !S.final && S.dealId && S.dealId !== id){ clearTimeout(S.saveT); await persistDraft().catch(() => {}); } // offener Vorgang bleibt gespeichert („Offen“ im Archiv)
   const { data:r, error } = await sb.from("deals").select("id,contract_no,vehicle,customer_name,customer_email,status,created_at,updated_at,original_path,draft,fields,locked_at,final_path,profiles(full_name,email)").eq("id", id).single();
   if (error || !r || r.final_path || !["draft","signing"].includes(r.status)){ loadReady(); return; }
-  if (SIGN_DEVICE) resumeDeal(r, true); else loadReady();
+  if (r.draft?.sent_at) seeDeal(r.id + "@" + r.draft.sent_at);
+  if (!SIGN_DEVICE){ loadReady(); return; }
+  const prev = S.dealId && S.dealId !== id && !S.final ? S.meta.kunde : null;
+  await resumeDeal(r, true);
+  if (S.dealId === id) jumpNote(r.customer_name, prev);
+}
+
+/* ---------- iPad: neuer Vertrag vom PC → sofort öffnen ----------
+   Das iPad fragt alle paar Sekunden nach, ob am PC gerade ein Vertrag „ans iPad geschickt“ wurde, und springt hinein.
+   Unterschreibt gerade ein Kunde, wird er nicht unterbrochen: Der neue Vertrag öffnet sich direkt danach. */
+const JUMP = { t:null, pending:null, seen:new Set() };
+try { JSON.parse(localStorage.getItem("ps-seen") || "[]").forEach(x => JUMP.seen.add(x)); } catch {}
+function seeDeal(key){ JUMP.seen.add(key); try { localStorage.setItem("ps-seen", JSON.stringify([...JUMP.seen].slice(-200))); } catch {} }
+const signBusy = () => document.body.classList.contains("customer") || !$("#pad").hidden || (!$("#hand").hidden && handMode && handMode !== "info") || (S.step===3 && S.phase==="kd");
+async function watchReady(){
+  clearTimeout(JUMP.t);
+  if (!me || REMOTE || !SIGN_DEVICE) return;
+  try {
+    if (JUMP.pending && !signBusy()){ const id = JUMP.pending; JUMP.pending = null; await openFromPush(id); }
+    else if (!document.hidden && navigator.onLine){
+      const since = new Date(Date.now() - 15*60000).toISOString();
+      const { data } = await sb.from("deals").select("id,customer_name,sent:draft->>sent_at").eq("seller_id", me.id).eq("status","draft").is("locked_at", null).is("final_path", null).gte("updated_at", since).order("updated_at", { ascending:false }).limit(5);
+      const fresh = (data || []).find(r => r.sent && Date.parse(r.sent) > Date.now() - 15*60000 && !JUMP.seen.has(r.id + "@" + r.sent) && r.id !== S.dealId);
+      if (fresh){ seeDeal(fresh.id + "@" + fresh.sent); await openFromPush(fresh.id); }
+    }
+  } catch(e){ console.warn("Neue Verträge prüfen", e); }
+  JUMP.t = setTimeout(watchReady, 5000);
+}
+function jumpNote(name, prev){
+  const n = $("#jumpNote");
+  if (JUMP.pending && !name){ n.innerHTML = ""; n.append(Object.assign(document.createElement("b"), { textContent:"Neuer Vertrag vom PC" }), " · öffnet sich, sobald der Kunde hier fertig ist."); }
+  else { n.innerHTML = ""; n.append(Object.assign(document.createElement("b"), { textContent:"Neuer Vertrag vom PC: " + (name || "") }), prev ? " · Der Vertrag von " + prev + " ist gespeichert und im Archiv unter „Offen“." : ""); }
+  n.hidden = false; n.classList.remove("show"); void n.offsetWidth; n.classList.add("show");
+  clearTimeout(n._t); if (!JUMP.pending || name) n._t = setTimeout(() => { n.hidden = true; }, 7000);
 }
 if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => {
   const d = e.data || {};
   if (d.type === "open" && d.deal) openFromPush(d.deal);
-  if (d.type === "push" && d.kind === "ready" && me) loadReady();
+  if (d.type === "push" && d.kind === "ready" && me){ loadReady(); watchReady(); }
 });
 
 /* ---------- Per Link unterschrieben: im Archiv abschließen ---------- */
@@ -2197,5 +2234,6 @@ if (REMOTE) startRemote(); else showAuth();
 </script>
 
 <button class="net" id="netBadge" hidden></button>
+<div class="jump-note" id="jumpNote" hidden role="status"></div>
 </body>
 </html>
