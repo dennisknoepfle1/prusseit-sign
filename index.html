@@ -221,6 +221,8 @@ p{margin:0}
 .toast{font-size:14px;padding:10px 12px;border-radius:var(--r-sm);background:var(--ok-soft);color:var(--ok);animation:rise .35s var(--ease-out) backwards}
 .toast.err{background:var(--red-soft);color:var(--red-ink)}
 .done-hero{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.done-hero .next-deal{margin-left:auto;font-size:17px;padding:14px 26px}
+#nextBox{margin:18px 0 4px}
 .done-hero svg{width:72px;height:72px;flex:none}
 .done-hero .c{fill:none;stroke:var(--ok);stroke-width:3;stroke-dasharray:166;stroke-dashoffset:166;animation:draw .7s var(--ease-out) .1s forwards}
 .done-hero .k{fill:none;stroke:var(--ok);stroke-width:4;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:48;stroke-dashoffset:48;animation:draw .45s var(--ease-out) .7s forwards}
@@ -549,6 +551,12 @@ body.customer .steps,body.customer .user{visibility:hidden}
     <div class="done-hero">
       <svg viewBox="0 0 56 56" aria-hidden="true"><circle class="c" cx="28" cy="28" r="26"/><path class="k" d="M16 29l8 8 16-17"/></svg>
       <div><p class="eyebrow">Abgeschlossen</p><h1>Vertrag unterschrieben</h1></div>
+      <button class="btn primary next-deal" id="nextDeal">Nächster Vertrag →</button>
+    </div>
+    <div class="panel ready" id="nextBox" hidden>
+      <h2>Als Nächstes bereit <span class="cnt" id="nextCnt"></span></h2>
+      <p class="hint">Am PC vorbereitet. Antippen, dann geht es direkt mit dem nächsten Vertrag weiter.</p>
+      <div class="arch" id="nextList"></div>
     </div>
     <p class="lede" id="doneLede"></p>
     <div class="work">
@@ -683,7 +691,7 @@ function go(n, force){
     $("#editPanel").hidden = n!==2; $("#signPanel").hidden = n!==3;
     setPlacing(null); drawFields(); updateLists();
   }
-  if (n===1 && me) loadReady();
+  if ((n===1 || n===4) && me) loadReady();
   if (n !== prev || force || wasHidden){ animate($(n===1 ? "#s1" : n===4 ? "#s4" : "#s2")); window.scrollTo({top:0, behavior:"instant"}); }
   requestAnimationFrame(moveInd);
 }
@@ -1602,7 +1610,7 @@ async function sendContract(resend){
   finally { b.disabled = false; }
 }
 $("#sendMail").addEventListener("click", () => sendContract(S.sent));
-function resetDeal(){ S.sellerEmail = null; Object.values(AUTO).forEach(([q]) => { delete $(q).dataset.auto; $(q).classList.remove("autofill"); }); $("#autoHint").hidden = true; S.printName = ""; S.ocrBusy = false; S.kvOcr = null; S.phase = "vk"; views.forEach(v => { v.io.disconnect(); v.pdf.destroy(); }); views.clear(); S.orig=null; S.fields=[]; S.locked=false; S.dbLocked=false; S.dealId=null; S.final=null; S.maxStep=1; $("#viewer").innerHTML=""; $("#finalViewer").innerHTML=""; ["#mNr","#mKd","#mMail","#mFz"].forEach(q => $(q).value = ""); S.kv = null; S.atts = []; S.parts = null; showDocs(); }
+function resetDeal(){ S.sellerEmail = null; Object.values(AUTO).forEach(([q]) => { delete $(q).dataset.auto; $(q).classList.remove("autofill"); }); $("#autoHint").hidden = true; S.printName = ""; S.ocrBusy = false; S.kvOcr = null; S.phase = "vk"; views.forEach(v => { v.io.disconnect(); v.pdf.destroy(); }); views.clear(); S.orig=null; S.fields=[]; S.locked=false; S.dbLocked=false; S.dealId=null; S.final=null; S.maxStep=1; $("#viewer").innerHTML=""; $("#finalViewer").innerHTML=""; ["#mNr","#mKd","#mMail","#mFz"].forEach(q => $(q).value = ""); S.kv = null; S.atts = []; S.parts = null; S.sealed = null; S.finalHash = null; S.draftReady = false; S.actField = null; S.fresh = null; $("#pdfIn").value = ""; $("#attIn").value = ""; $("#mailAddr").value = ""; showDocs(); }
 $("#restart").addEventListener("click", () => { resetDeal(); go(1); });
 
 /* ---------- Anmeldung ---------- */
@@ -1762,6 +1770,7 @@ function goHome(){
   resetDeal(); go(1);
 }
 $("#navHome").addEventListener("click", goHome);
+$("#nextDeal").addEventListener("click", goHome);
 document.querySelector(".brand").addEventListener("click", goHome);
 
 /* ---------- Bestehenden Vorgang öffnen (Entwurf) ---------- */
@@ -1850,9 +1859,11 @@ async function loadReady(){
   if (!error){
     const rows = (data || []).filter(r => !r.final_path && (r.status==="signing" || (r.status==="draft" && r.draft && r.draft.ready !== false && !r.locked_at)));
     const box = $("#readyBox"), list = $("#readyList"); box.hidden = !rows.length; $("#readyCnt").textContent = rows.length; list.innerHTML = "";
+    const next = rows.filter(r => r.id !== S.dealId); // Abschluss-Bildschirm: was als Nächstes am iPad unterschrieben werden kann
+    $("#nextBox").hidden = !SIGN_DEVICE || !next.length; $("#nextCnt").textContent = next.length; $("#nextList").innerHTML = "";
     box.querySelector("h2").firstChild.textContent = SIGN_DEVICE ? "Bereit zur Unterschrift " : "Wartet auf Unterschrift am iPad ";
     box.querySelector(".hint").textContent = SIGN_DEVICE ? "Am PC vorbereitet oder unterbrochen. Antippen, dann geht es direkt mit der Unterschrift weiter." : "Diese Verträge sind ans iPad geschickt. Felder kannst du hier noch korrigieren, unterschrieben wird am iPad.";
-    rows.forEach(r => {
+    const build = (r, list) => {
       const sig = r.status === "signing";
       const row = document.createElement("div"); row.className = "arch-row" + (sig ? " open" : "");
       const av = document.createElement("span"); av.className = "av"; av.textContent = initials(r.customer_name);
@@ -1869,11 +1880,14 @@ async function loadReady(){
       } else if (!sig) mk("Felder bearbeiten", "", () => resumeDeal(r, false));
       else { const x = mk("Nur am iPad", "", () => {}); x.disabled = true; x.title = "Unterschriften werden nur am iPad geleistet"; }
       row.append(av, a, t, pill, acts); list.appendChild(row);
-    });
+    };
+    rows.forEach(r => build(r, list));
+    if (SIGN_DEVICE) next.forEach(r => build(r, $("#nextList")));
   }
-  readyTimer = setTimeout(() => { if (!$("#s1").hidden && !document.hidden) loadReady(); else readyTimer = setTimeout(loadReady, 20000); }, 20000);
+  const here = () => !$("#s1").hidden || !$("#s4").hidden;
+  readyTimer = setTimeout(function tick(){ if (here() && !document.hidden) loadReady(); else readyTimer = setTimeout(tick, 20000); }, 20000);
 }
-document.addEventListener("visibilitychange", () => { if (!document.hidden && me && !$("#s1").hidden) loadReady(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && me && (!$("#s1").hidden || !$("#s4").hidden)) loadReady(); });
 
 /* ---------- Per Link unterschrieben: im Archiv abschließen ---------- */
 async function completeRemote(r){
