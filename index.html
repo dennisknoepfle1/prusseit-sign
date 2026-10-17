@@ -222,6 +222,26 @@ p{margin:0}
 .toast.err{background:var(--red-soft);color:var(--red-ink)}
 .net{position:fixed;left:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:15;border:0;border-radius:999px;padding:11px 16px;font:600 14px/1 inherit;font-family:inherit;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:8px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
 body.customer .net,body.authing .net{display:none}
+.quick{margin-top:18px;border:1.5px solid var(--ok);background:color-mix(in srgb,var(--ok) 7%,transparent);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.quick h3{margin:0;color:var(--ok)}.quick .kv dd.warn{color:var(--red);font-weight:600}
+.quick.pop{animation:jumpIn .45s cubic-bezier(.2,.9,.3,1.2)}
+.drop-zone{position:fixed;inset:0;z-index:40;background:rgba(14,12,13,.82);display:grid;place-items:center;padding:24px;pointer-events:none}
+.drop-zone>div{border:3px dashed var(--red);border-radius:24px;padding:56px 48px;max-width:640px;text-align:center;color:#fff;display:flex;flex-direction:column;gap:10px}
+.drop-zone b{font-size:30px}.drop-zone span{color:#cfc8ca;font-size:16px}
+.prog{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:15;display:flex;align-items:center;gap:14px;background:#141112;color:#fff;border-radius:999px;padding:10px 10px 10px 20px;box-shadow:0 10px 30px rgba(0,0,0,.35);max-width:calc(100vw - 32px);white-space:nowrap}
+.prog-bar{width:90px;height:8px;border-radius:9px;background:rgba(255,255,255,.18);overflow:hidden;flex:none}.prog-bar i{display:block;height:100%;width:0;background:var(--red);border-radius:9px;transition:width .5s var(--ease)}
+.prog.vk .prog-bar i{background:#6d8fe0}.prog.done .prog-bar i{background:var(--ok)}
+#progTx{font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis}
+.sigfield.next::after{content:"↓";position:absolute;left:50%;top:-38px;transform:translateX(-50%);font-size:28px;font-weight:800;color:var(--red);animation:nextBounce 1s ease-in-out infinite;pointer-events:none}
+.sigfield.vk.next::after{color:#3B5BA9}
+@keyframes nextBounce{50%{transform:translate(-50%,8px)}}
+.check-dlg{position:fixed;inset:0;z-index:35;background:rgba(8,7,7,.6);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);display:grid;place-items:center;padding:16px}
+.check-in{background:var(--surface,#fff);color:var(--ink);border-radius:18px;padding:24px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);display:flex;flex-direction:column;gap:14px}
+.check-in h2{margin:0;font-size:22px}
+.check-in ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+.check-in li{padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--red) 8%,transparent);border-left:3px solid var(--red);font-size:15px;line-height:1.4}
+.check-in li.link{cursor:pointer}.check-in li.link::after{content:" → zeigen";color:var(--red);font-weight:600}
+.check-acts{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
 .jump-note{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 76px);transform:translateX(-50%);z-index:15;max-width:min(680px,calc(100vw - 32px));background:var(--red);color:#fff;border-radius:14px;padding:14px 20px;font-size:15px;line-height:1.35;box-shadow:0 10px 30px rgba(227,0,27,.35)}
 .jump-note.show{animation:jumpIn .45s cubic-bezier(.2,.9,.3,1.2)}@keyframes jumpIn{from{opacity:0;transform:translate(-50%,-14px) scale(.96)}}
 body.customer .jump-note{display:none}
@@ -345,6 +365,7 @@ body.authing main{max-width:none;padding:0}
 @media (max-width:700px){.arch-row{grid-template-columns:44px minmax(0,1fr) auto}.arch-row .seller,.arch-row .pill{display:none}}
 
 @media (max-width:900px){
+  .prog.done{display:none}
   #handBtn:not([hidden]):not(:disabled),#finish:not([hidden]):not(:disabled){position:fixed;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));bottom:max(16px,env(safe-area-inset-bottom,0px));width:auto;z-index:15;min-height:60px;border-radius:999px;box-shadow:0 10px 30px rgba(227,0,27,.4);animation:rise .45s var(--ease-out) backwards}
   .start,.work{grid-template-columns:minmax(0,1fr)}
   .side{position:static;order:-1;max-height:none;overflow:visible}
@@ -492,9 +513,14 @@ body.customer .steps,body.customer .user{visibility:hidden}
         </div>
         <p class="auto-hint" id="autoHint" hidden></p>
         <div class="docs">
-          <div class="docrow" id="kvRow"><span class="label">Kaufvertrag</span><span class="hint" id="kvName">Noch kein PDF gewählt</span><label class="btn small file">PDF wählen<input type="file" id="pdfIn" accept="application/pdf"></label></div>
+          <div class="docrow" id="kvRow"><span class="label">Kaufvertrag</span><span class="hint" id="kvName">Noch kein PDF gewählt. Tipp: PDFs einfach ins Fenster ziehen.</span><label class="btn small file">PDF wählen<input type="file" id="pdfIn" accept="application/pdf"></label></div>
           <div class="docrow"><span class="label">Anlagen (optional)</span><span class="hint">z. B. CarVertical, Carfax. Werden ans Vertragsende angehängt und Vertragsbestandteil.</span><label class="btn small file">Anlage hinzufügen<input type="file" id="attIn" accept="application/pdf" multiple></label></div>
           <ul class="list" id="attList"></ul>
+        </div>
+        <div class="quick" id="quickBox" hidden>
+          <h3>Alles erkannt, bitte kurz prüfen</h3>
+          <dl class="kv" id="quickList"></dl>
+          <button class="btn primary block" id="quickGo">Passt, weiter zu den Feldern <span class="arrow">→</span></button>
         </div>
         <div class="actions">
           <button class="btn primary" id="startDeal" disabled>Weiter zu den Feldern <span class="arrow">→</span></button>
@@ -701,6 +727,7 @@ function go(n, force){
     b.disabled = !ok || i===n;
   }
   document.body.classList.toggle("customer", n===3 && S.phase==="kd");
+  if (n !== 3) $("#prog").hidden = true;
   if (n===2||n===3){
     const kd = n===3 && S.phase==="kd";
     $("#workEyebrow").textContent = n===2 ? "Schritt 2 von 4" : kd ? "Für " + S.meta.kunde : "Schritt 3 von 4 · Verkäufer";
@@ -862,6 +889,10 @@ async function readKvData(bytes){
     if (sal){ const nm = left.find(it => it.y < sal.y - 2 && it.y > sal.y - 16 && Math.abs(it.x - sal.x) < 6); if (nm) out.kunde = nm.s; }
     const mails = items.map(it => (it.s.match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/) || [])[0]).filter(m => m && !own(m));
     if (mails.length) out.mail = mails[0].toLowerCase();
+    // Vorgangsnummer: die Nummer mit # auf Seite 1 (z. B. „Schlüssel-Nr.: #96“)
+    const nr = items.filter(it => it.y > H*0.45).map(it => (it.s.match(/(?:^|\s)#\s?(\d{1,10})\b/) || [])[1]).find(Boolean);
+    if (nr) out.vorgang = "#" + nr;
+    out.isKv = items.some(it => /^KAUFVERTRAG$/i.test(it.s));
     const kv = items.find(it => /^KAUFVERTRAG$/i.test(it.s));
     const fin = items.find(it => it.s === "FIN"), finV = (fin && items.find(b => Math.abs(b.y - fin.y) < 2 && b.x > fin.x && /^[A-HJ-NPR-Z0-9]{17}$/i.test(b.s))) || items.find(it => /^[A-HJ-NPR-Z0-9]{17}$/.test(it.s) && /\d/.test(it.s) && /[A-Z]/.test(it.s));
     let model = null;
@@ -870,8 +901,9 @@ async function readKvData(bytes){
     return out;
   } finally { pdf.destroy(); }
 }
-const AUTO = { kunde:["#mKd","Kunde"], mail:["#mMail","E-Mail"], fahrzeug:["#mFz","Fahrzeug"] };
+const AUTO = { vorgang:["#mNr","Vorgangs-Nr."], kunde:["#mKd","Kunde"], mail:["#mMail","E-Mail"], fahrzeug:["#mFz","Fahrzeug"] };
 function applyKvData(d){
+  S.kvData = d; // für die Prüfung vor dem Senden
   const got = [];
   Object.entries(AUTO).forEach(([k,[q,label]]) => {
     const inp = $(q); if (!d[k]) return;
@@ -880,8 +912,20 @@ function applyKvData(d){
   });
   const h = $("#autoHint"); h.hidden = !got.length;
   if (got.length) h.textContent = "✓ Aus dem Vertrag übernommen: " + got.join(", ").replace(/, ([^,]*)$/, " und $1") + ". Bitte kurz prüfen.";
+  quickShow();
 }
-Object.values(AUTO).forEach(([q]) => $(q).addEventListener("input", e => { delete e.target.dataset.auto; e.target.classList.remove("autofill"); }));
+/* Ein-Tipp-Start: alles erkannt → nur noch bestätigen */
+function quickShow(){
+  const q = $("#quickBox"); if (!q) return;
+  const kd = $("#mKd").value.trim(), fz = $("#mFz").value.trim(), nr = $("#mNr").value.trim(), mail = $("#mMail").value.trim();
+  q.hidden = !(S.kv && kd);
+  if (q.hidden) return;
+  const rows = [["Vorgang", nr || "–"], ["Kunde", kd], ["E-Mail", mail || "fehlt"], ["Fahrzeug", fz || "–"], ["Dokumente", "Kaufvertrag" + (S.atts.length ? " + " + S.atts.length + (S.atts.length === 1 ? " Anlage" : " Anlagen") : "")]];
+  const dl = $("#quickList"); dl.innerHTML = "";
+  rows.forEach(([k,v]) => { const dt = document.createElement("dt"); dt.textContent = k; const dd = document.createElement("dd"); dd.textContent = v; if (v === "fehlt") dd.className = "warn"; dl.append(dt, dd); });
+  q.classList.remove("pop"); void q.offsetWidth; q.classList.add("pop");
+}
+Object.values(AUTO).forEach(([q]) => $(q).addEventListener("input", e => { delete e.target.dataset.auto; e.target.classList.remove("autofill"); quickShow(); }));
 
 /* Bildseiten (z. B. Aufwandspauschale) per Texterkennung nach „Unterschrift Kunde/Verkäufer: ____“ durchsuchen */
 const TESS = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/";
@@ -931,6 +975,7 @@ async function loadDoc(bytes, fields, name, opt={}){
       S.imagePages = auto.imagePages;
       fields = fields.concat(auto);
       S.autoCount = { sig:auto.filter(isSig).length, text:auto.filter(f => f.kind==="text").length };
+      S.autoSigs = auto.filter(isSig).map(f => ({ id:f.id, page:f.page, role:f.role }));
     }
   } catch(e) { console.error(e); err.textContent = "Das PDF ließ sich nicht öffnen. Es ist vermutlich passwortgeschützt oder beschädigt. Bitte ein anderes wählen."; err.hidden = false; return; }
   S.orig = bytes; S.fileName = name; S.fields = fields; S.locked = false; S.final = null; S.maxStep = 2;
@@ -961,6 +1006,7 @@ async function runOcr(bytes, pages, fi){
     if (S.dealId !== deal || S.locked) return;
     const fresh = found.filter(f => !S.fields.some(g => isSig(g) && g.page === f.page && Math.abs(g.y - f.y) < 0.03));
     S.fields.push(...fresh); drawFields();
+    (S.autoSigs ||= []).push(...fresh.map(f => ({ id:f.id, page:f.page, role:f.role })));
     fi.textContent = base + (fresh.length ? fresh.length + " weitere Unterschriftsfelder auf " + (pages.length === 1 ? "der Bildseite" : "den Bildseiten") + " erkannt (S. " + [...new Set(fresh.map(f => f.page+1))].join(", ") + ")." : "Auf den Bildseiten wurden keine Unterschriftsstellen gefunden.");
   } catch(e){ console.error(e); if (S.dealId === deal) fi.textContent = base + "Bildseiten konnten nicht gelesen werden (" + (e.message||e) + "). Felder dort bitte von Hand setzen."; }
   finally { if (S.dealId === deal){ S.ocrBusy = false; fi.classList.remove("busy"); updateLists(); } }
@@ -1190,33 +1236,54 @@ async function readPdf(file){
 const pdfErr = n => "„" + n + "“ ließ sich nicht öffnen. Es ist vermutlich passwortgeschützt oder beschädigt.";
 function showDocs(){
   $("#kvRow").classList.toggle("ok", !!S.kv);
-  $("#kvName").textContent = S.kv ? "✓ " + S.kv.name + " · " + S.kv.pages + " Seiten" : "Noch kein PDF gewählt";
+  $("#kvName").textContent = S.kv ? "✓ " + S.kv.name + " · " + S.kv.pages + " Seiten" : "Noch kein PDF gewählt. Tipp: PDFs einfach ins Fenster ziehen.";
   const ul = $("#attList"); ul.innerHTML = "";
   S.atts.forEach((a,i) => {
     const li = document.createElement("li");
     const dot = document.createElement("span"); dot.className = "dot tx";
     const tx = document.createElement("span"); tx.textContent = "Anlage " + (i+1) + ": " + a.name + " · " + a.pages + " S."; tx.style.minWidth = "0"; tx.style.overflowWrap = "anywhere";
     const x = document.createElement("button"); x.className = "btn small"; x.textContent = "Entfernen";
-    x.addEventListener("click", () => { S.atts.splice(i,1); showDocs(); });
+    x.addEventListener("click", () => { S.atts.splice(i,1); showDocs(); quickShow(); });
     li.append(dot, tx, x); ul.appendChild(li);
   });
   $("#startDeal").disabled = !S.kv;
 }
 $("#pdfIn").addEventListener("change", async e => {
   const file = e.target.files[0]; e.target.value = ""; if (!file) return;
+  await setKv(file);
+});
+async function setKv(file, pre){
   const err = $("#loadErr"); err.hidden = true;
-  try { S.kv = await readPdf(file); } catch { err.textContent = pdfErr(file.name); err.hidden = false; }
+  try { S.kv = pre || await readPdf(file); } catch { err.textContent = pdfErr(file.name); err.hidden = false; }
   showDocs();
-  if (S.kv) readKvData(S.kv.bytes).then(applyKvData).catch(e => console.warn("Auslesen", e));
+  if (S.kv) await readKvData(S.kv.bytes).then(applyKvData).catch(e => console.warn("Auslesen", e));
   // Bildseiten schon jetzt im Hintergrund lesen, während die Kundendaten eingetragen werden
   if (S.kv){ const bytes = S.kv.bytes, pages = S.kv.pages; const run = detectFields(bytes, pages).then(d => ocrFields(bytes, d.imagePages)); run.catch(() => {}); S.kvOcr = { bytes, run }; }
-});
+}
+/* PDFs einfach ins Fenster ziehen: der Kaufvertrag wird erkannt, alles andere wird Anlage */
+async function dropPdfs(files){
+  const err = $("#loadErr"); err.hidden = true;
+  const pdfs = [...files].filter(f => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name));
+  if (!pdfs.length){ err.textContent = "Bitte PDF-Dateien hineinziehen."; err.hidden = false; return; }
+  const read = [];
+  for (const f of pdfs){ try { const p = await readPdf(f); let kv = false; try { kv = (await readKvData(p.bytes)).isKv; } catch {} read.push({ f, p, kv }); } catch { err.textContent = pdfErr(f.name); err.hidden = false; } }
+  const main = read.find(r => r.kv) || (!S.kv ? read[0] : null);
+  for (const r of read) if (r !== main) S.atts.push(r.p);
+  if (main) await setKv(main.f, main.p); else { showDocs(); quickShow(); }
+}
+let dragN = 0;
+const dropOk = () => me && !REMOTE && !$("#s1").hidden;
+window.addEventListener("dragenter", e => { if (!dropOk() || ![...(e.dataTransfer?.types || [])].includes("Files")) return; e.preventDefault(); dragN++; $("#dropZone").hidden = false; });
+window.addEventListener("dragover", e => { if (dropOk() && [...(e.dataTransfer?.types || [])].includes("Files")) e.preventDefault(); });
+window.addEventListener("dragleave", () => { if (--dragN <= 0){ dragN = 0; $("#dropZone").hidden = true; } });
+window.addEventListener("drop", e => { if (!dropOk()) return; e.preventDefault(); dragN = 0; $("#dropZone").hidden = true; if (e.dataTransfer?.files?.length) dropPdfs(e.dataTransfer.files); });
 $("#attIn").addEventListener("change", async e => {
   const files = [...e.target.files]; e.target.value = "";
   const err = $("#loadErr"); err.hidden = true;
   for (const f of files){ try { S.atts.push(await readPdf(f)); } catch { err.textContent = pdfErr(f.name); err.hidden = false; } }
-  showDocs();
+  showDocs(); quickShow();
 });
+$("#quickGo").addEventListener("click", () => $("#startDeal").click());
 $("#startDeal").addEventListener("click", async () => {
   readMeta();
   const err = $("#loadErr"); err.hidden = true;
@@ -1410,7 +1477,25 @@ function drawFields(){
     wrap.appendChild(d);
   });
 }
-const jumpTo = f => document.querySelector('#viewer .page[data-page="'+f.page+'"]')?.scrollIntoView({ behavior:"smooth", block:"center" });
+const jumpTo = f => (document.querySelector('#viewer [data-fid="'+f.id+'"]') || document.querySelector('#viewer .page[data-page="'+f.page+'"]'))?.scrollIntoView({ behavior:"smooth", block:"center" });
+const progPos = () => { const v = $("#viewer")?.getBoundingClientRect(); if (v?.width) $("#prog").style.left = Math.round(v.left + v.width/2) + "px"; };
+addEventListener("resize", progPos);
+/* Fortschritt unten auf dem Bildschirm: „Noch 4 Unterschriften“, ein Tipp springt zum nächsten Feld */
+function progUi(){
+  const p = $("#prog"); if (!p) return;
+  if (S.step !== 3){ p.hidden = true; return; }
+  const kd = S.phase === "kd", mine = S.fields.filter(f => isSig(f) && f.role === S.phase), left = mine.filter(f => !f.sig);
+  p.hidden = !mine.length; if (!mine.length) return;
+  progPos();
+  p.className = "prog" + (kd ? "" : " vk") + (left.length ? "" : " done");
+  $("#progFill").style.width = Math.round((mine.length - left.length) / mine.length * 100) + "%";
+  $("#progTx").textContent = left.length ? (!kd ? "Deine Unterschrift fehlt noch (gilt für alle " + mine.length + " Felder)" : left.length === 1 ? "Noch 1 Unterschrift" : "Noch " + left.length + " Unterschriften") : (kd ? "Alle Unterschriften geleistet ✓" : "Fertig ✓");
+  const g = $("#progGo");
+  if (left.length){ g.textContent = kd ? "Zur nächsten Stelle ↓" : "Zum nächsten Feld ↓"; g.onclick = () => jumpTo(left[0]); }
+  else { const b = kd ? $("#finish") : $("#handBtn"); g.textContent = kd ? (REMOTE ? "Absenden" : "Fertig") : "An den Kunden übergeben"; g.onclick = () => b.click(); }
+  document.querySelectorAll("#viewer .sigfield.next").forEach(n => n.classList.remove("next"));
+  if (left[0]) document.querySelector('#viewer [data-fid="'+left[0].id+'"]')?.classList.add("next");
+}
 function updateLists(){
   const mk = (f, withState) => {
     const li = document.createElement("li");
@@ -1443,15 +1528,46 @@ function updateLists(){
   $("#signRole").textContent = kd ? "Käufer · Vorgang " + S.meta.vorgang : "Verkäufer · Autowelt Prusseit GmbH";
   $("#signHead").textContent = kd ? "Sie unterschreiben dieses Dokument" : "Du unterschreibst zuerst";
   const left = sigs.filter(f => !f.sig).length;
+  progUi();
   $("#lockHint").textContent = all ? (kd ? (REMOTE ? "Alle Unterschriften sind da. Bitte jetzt absenden." : "Alle Unterschriften sind da. Vielen Dank!") : "Fertig. Jetzt das iPad an " + S.meta.kunde + " übergeben.")
     : kd ? (left === 1 ? "Noch eine Unterschrift. Tippen Sie auf das rot markierte Feld." : "Noch " + left + " Unterschriften. Tippen Sie auf ein rot markiertes Feld.")
          : (left === 1 ? "Noch eine Unterschrift von dir, dann übergibst du an den Kunden." : "Noch " + left + " Unterschriften von dir, dann übergibst du an den Kunden.");
 }
-$("#toSign").addEventListener("click", () => {
+/* Prüfung vor dem Senden: typische Fehler abfangen, bevor der Vertrag gesperrt oder ans iPad geschickt wird */
+const normName = s => String(s || "").toLocaleLowerCase("de-DE").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ß/g, "ss").replace(/[^a-z0-9]+/g, " ").trim();
+function preCheck(){
+  readMeta();
+  const out = [], k = S.kvData || {};
+  const mail = S.meta.mail;
+  if (!mail) out.push({ t:"Keine E-Mail-Adresse des Kunden. Er bekommt den fertigen Vertrag dann nicht automatisch per E-Mail." });
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) out.push({ t:"Die E-Mail-Adresse „" + mail + "“ sieht nicht gültig aus." });
+  else if (k.mail && k.mail !== mail.toLowerCase()) out.push({ t:"Die E-Mail-Adresse „" + mail + "“ weicht vom Vertrag ab (dort: „" + k.mail + "“)." });
+  if (k.kunde && normName(k.kunde) !== normName(S.meta.kunde)) out.push({ t:"Der Kundenname „" + S.meta.kunde + "“ weicht vom Namen auf Seite 1 ab (dort: „" + k.kunde + "“)." });
+  if (k.vorgang && k.vorgang !== S.meta.vorgang) out.push({ t:"Die Vorgangsnummer „" + S.meta.vorgang + "“ weicht vom Vertrag ab (dort: „" + k.vorgang + "“)." });
+  if (!S.fields.some(f => isSig(f) && f.role==="kd")) out.push({ t:"Es gibt kein Unterschriftsfeld für den Käufer." });
+  if (!S.fields.some(f => isSig(f) && f.role==="vk")) out.push({ t:"Es gibt kein Unterschriftsfeld für den Verkäufer." });
+  const gone = (S.autoSigs || []).filter(a => !S.fields.some(f => f.id === a.id));
+  gone.forEach(a => out.push({ t:"Auf Seite " + (a.page+1) + " wurde ein erkanntes Unterschriftsfeld (" + ROLE[a.role] + ") entfernt.", page:a.page }));
+  const empty = S.fields.filter(f => f.kind==="text" && !f.optional && !String(f.value||"").trim());
+  empty.forEach(f => out.push({ t:"Textfeld auf Seite " + (f.page+1) + " ist noch leer.", f }));
+  return out;
+}
+function checkDialog(items, goLabel){
+  return new Promise(res => {
+    const d = $("#checkDlg"), ul = $("#checkList"); ul.innerHTML = "";
+    const done = v => { d.hidden = true; $("#checkGo").onclick = $("#checkFix").onclick = null; res(v); };
+    items.forEach(it => { const li = document.createElement("li"); li.textContent = it.t; if (it.f || it.page != null){ li.classList.add("link"); li.addEventListener("click", () => { done(false); if (it.f) jumpTo(it.f); else document.querySelector('#viewer .page[data-page="'+it.page+'"]')?.scrollIntoView({ behavior:"smooth", block:"start" }); }); } ul.appendChild(li); });
+    $("#checkTitle").textContent = items.length === 1 ? "Bitte kurz prüfen: 1 Hinweis" : "Bitte kurz prüfen: " + items.length + " Hinweise";
+    $("#checkGo").textContent = goLabel || "Trotzdem weiter";
+    $("#checkGo").onclick = () => done(true); $("#checkFix").onclick = () => done(false);
+    d.hidden = false;
+  });
+}
+$("#toSign").addEventListener("click", async () => {
   if (!SIGN_DEVICE) return;
   document.activeElement?.blur?.();
-  const empty = S.fields.filter(f => f.kind==="text" && !f.optional && !String(f.value||"").trim());
-  if (empty.length && !confirm(empty.length + (empty.length===1 ? " Textfeld ist" : " Textfelder sind") + " noch leer. Ab der ersten Unterschrift lässt sich nichts mehr ändern. Trotzdem weiter?")) { jumpTo(empty[0]); return; }
+  const warn = preCheck();
+  if (warn.length && !(await checkDialog(warn, "Trotzdem zur Unterschrift"))) return;
   S.maxStep = 3;
   if (S.fields.some(f => isSig(f) && f.role==="vk" && !f.sig)){ S.phase = "vk"; go(3); const n = S.fields.find(f => isSig(f) && f.role==="vk"); if (n) setTimeout(() => jumpTo(n), 60); }
   else { S.phase = "vk"; go(3); showHand("toKd"); }
@@ -1763,7 +1879,7 @@ async function sendContract(resend){
   finally { b.disabled = false; }
 }
 $("#sendMail").addEventListener("click", () => sendContract(S.sent));
-function resetDeal(){ S.sellerEmail = null; Object.values(AUTO).forEach(([q]) => { delete $(q).dataset.auto; $(q).classList.remove("autofill"); }); $("#autoHint").hidden = true; S.printName = ""; S.ocrBusy = false; S.kvOcr = null; S.phase = "vk"; views.forEach(v => { v.io.disconnect(); v.pdf.destroy(); }); views.clear(); S.orig=null; S.fields=[]; S.locked=false; S.dbLocked=false; S.dealId=null; S.final=null; S.maxStep=1; $("#viewer").innerHTML=""; $("#finalViewer").innerHTML=""; ["#mNr","#mKd","#mMail","#mFz"].forEach(q => $(q).value = ""); S.kv = null; S.atts = []; S.parts = null; S.sealed = null; S.finalHash = null; S.draftReady = false; S.actField = null; S.fresh = null; $("#pdfIn").value = ""; $("#attIn").value = ""; $("#mailAddr").value = ""; showDocs(); }
+function resetDeal(){ S.sellerEmail = null; Object.values(AUTO).forEach(([q]) => { delete $(q).dataset.auto; $(q).classList.remove("autofill"); }); $("#autoHint").hidden = true; S.printName = ""; S.ocrBusy = false; S.kvOcr = null; S.phase = "vk"; views.forEach(v => { v.io.disconnect(); v.pdf.destroy(); }); views.clear(); S.orig=null; S.fields=[]; S.locked=false; S.dbLocked=false; S.dealId=null; S.final=null; S.maxStep=1; $("#viewer").innerHTML=""; $("#finalViewer").innerHTML=""; ["#mNr","#mKd","#mMail","#mFz"].forEach(q => $(q).value = ""); S.kv = null; S.atts = []; S.parts = null; S.kvData = null; S.autoSigs = null; $("#quickBox").hidden = true; S.sealed = null; S.finalHash = null; S.draftReady = false; S.actField = null; S.fresh = null; $("#pdfIn").value = ""; $("#attIn").value = ""; $("#mailAddr").value = ""; showDocs(); }
 $("#restart").addEventListener("click", () => { resetDeal(); go(1); });
 
 /* ---------- Anmeldung ---------- */
@@ -1956,7 +2072,7 @@ async function resumeDeal(r, toSign){
     if (signing && !SIGN_DEVICE) throw new Error("Dieser Vorgang ist schon in der Unterschrift und kann nur am iPad fortgesetzt werden.");
     resetDeal();
     S.meta = metaFrom(r, d); S.parts = d?.parts || null; fillMeta();
-    S.orig = bytes; S.fileName = d?.fileName || ("Kaufvertrag_" + (S.meta.vorgang || "").replace(/[^\w.-]+/g, "_") + "_unterschrieben.pdf");
+    S.orig = bytes; S.fileName = d?.fileName || ("Kaufvertrag_" + (S.meta.vorgang || "").replace(/^#/, "").replace(/[^\w.-]+/g, "_") + "_unterschrieben.pdf");
     S.pageSizes = (await PDFLib.PDFDocument.load(bytes, { ignoreEncryption:true })).getPages().map(p => p.getSize());
     S.origHash = await sha256(bytes); S.dealId = r.id; S.final = null; S.draftReady = d?.ready !== false && !!d;
     $("#origHash").textContent = S.origHash.toUpperCase().match(/.{1,8}/g).join(" ");
@@ -2004,6 +2120,7 @@ async function cancelDeal(r){
 }
 $("#saveDraft").addEventListener("click", async () => {
   document.activeElement?.blur?.();
+  if (!SIGN_DEVICE){ const warn = preCheck(); if (warn.length && !(await checkDialog(warn, "Trotzdem ans iPad schicken"))) return; }
   const b = $("#saveDraft"); b.disabled = true;
   try {
     clearTimeout(S.saveT);
@@ -2235,5 +2352,8 @@ if (REMOTE) startRemote(); else showAuth();
 
 <button class="net" id="netBadge" hidden></button>
 <div class="jump-note" id="jumpNote" hidden role="status"></div>
+<div class="drop-zone" id="dropZone" hidden><div><b>PDFs hier loslassen</b><span>Kaufvertrag und Anlagen auf einmal. Kunde, Fahrzeug, Vorgangsnummer und Felder werden automatisch erkannt.</span></div></div>
+<div class="prog" id="prog" hidden><div class="prog-bar"><i id="progFill"></i></div><span id="progTx"></span><button class="btn small primary" id="progGo"></button></div>
+<div class="check-dlg" id="checkDlg" hidden role="dialog" aria-modal="true" aria-labelledby="checkTitle"><div class="check-in"><h2 id="checkTitle">Bitte kurz prüfen</h2><ul id="checkList"></ul><div class="check-acts"><button class="btn" id="checkGo">Trotzdem weiter</button><button class="btn primary" id="checkFix">Korrigieren</button></div></div></div>
 </body>
 </html>
