@@ -1162,7 +1162,9 @@ async function flush(){
     const blocked = new Set();
     for (const it of await obAll()){
       if (it.user !== me.id || blocked.has(it.deal)) continue;
-      if (it.failed){ blocked.add(it.deal); continue; }
+      // Fehlgeschlagenes nach 2 Minuten von selbst erneut versuchen (z. B. wenn der Fehler inzwischen auf dem Server behoben ist)
+      if (it.failed && Date.now() - (it.failedAt || 0) > 120000){ it.failed = false; it.tries = 0; await obPut(it); }
+      if (it.failed){ blocked.add(it.deal); waiting = true; continue; }
       if (!navigator.onLine){ waiting = true; finalUi(it, "wait"); break; }
       OB.inflight = it.id; obUi("sync"); finalUi(it, "run");
       try {
@@ -1178,7 +1180,7 @@ async function flush(){
         console.error("Ausgangskorb", it.op, e);
         it.tries = (it.tries || 0) + 1; it.error = e.message;
         if (SOFT.has(it.op)){ await obDel(it.id); finalUi(it, "err", e.message); continue; }
-        if (it.tries >= 4){ it.failed = true; finalUi(it, "err", e.message); }
+        if (it.tries >= 4){ it.failed = true; it.failedAt = Date.now(); finalUi(it, "err", e.message); }
         await obPut(it); blocked.add(it.deal); waiting = true;
       }
     }
