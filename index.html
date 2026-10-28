@@ -284,6 +284,9 @@ body.customer .jump-note{display:none}
 .pad-head p{color:var(--muted);font-size:15px;margin-top:4px}
 .canvas-wrap{position:relative;background:var(--paper);border:1px solid var(--line);border-radius:14px;aspect-ratio:3/1;max-width:100%;box-shadow:inset 0 2px 10px rgba(0,0,0,.04)}
 .canvas-wrap canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;border-radius:14px}
+/* Beim Unterschreiben mit Stift/Finger darf iPadOS keinen Text markieren (blaue Auswahl, Kopieren-Menü) */
+.pad,.pad *,body.customer,body.customer *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.pad input,body.customer input{-webkit-user-select:text;user-select:text}
 .baseline{position:absolute;left:6%;right:6%;bottom:24%;border-bottom:1.5px solid #B9B2B4;pointer-events:none}
 .baseline::before{content:"×";position:absolute;left:-4px;bottom:2px;color:#9B9396;font-size:20px}
 .baseline::after{content:"Hier unterschreiben";position:absolute;right:0;top:8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#B9B2B4}
@@ -1659,7 +1662,10 @@ function lineW(p, w){ return Math.max(1.2, (w/320) * (0.55 + (p ?? 0.5))) * dpr;
 function seg(a, b, w, c){ c.strokeStyle = "#14306E"; c.lineCap = "round"; c.lineJoin = "round"; c.lineWidth = lineW(b.p, w); c.beginPath(); c.moveTo(a.x*c.canvas.width, a.y*c.canvas.height); c.lineTo(b.x*c.canvas.width, b.y*c.canvas.height); c.stroke(); }
 function redraw(c = ctx, w = cv.width/dpr){ c.clearRect(0,0,c.canvas.width,c.canvas.height); strokes.forEach(s => { if (s.length===1) seg(s[0], {...s[0], x:s[0].x+0.001}, w, c); for (let i=1;i<s.length;i++) seg(s[i-1], s[i], w, c); }); }
 function pt(e){ const r = cv.getBoundingClientRect(); return { x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height, t:Math.round(performance.now()-openedAt), p: e.pointerType==="mouse" ? 0.5 : (e.pressure || 0.5), k:e.pointerType[0] }; }
-cv.addEventListener("pointerdown", e => { e.preventDefault(); cv.setPointerCapture(e.pointerId); if (!strokes.length) t0 = performance.now(); cur = [pt(e)]; strokes.push(cur); redraw(); padState(); });
+// Safari auf dem iPad: Touch-Ereignisse selbst abfangen, sonst startet die Textauswahl oder Scribble
+["touchstart","touchmove","touchend"].forEach(t => cv.addEventListener(t, e => e.preventDefault(), { passive:false }));
+document.addEventListener("selectstart", e => { if ((!$("#pad").hidden || document.body.classList.contains("customer")) && !e.target.closest?.("input,textarea")) e.preventDefault(); });
+cv.addEventListener("pointerdown", e => { e.preventDefault(); try { getSelection().removeAllRanges(); } catch {} cv.setPointerCapture(e.pointerId); if (!strokes.length) t0 = performance.now(); cur = [pt(e)]; strokes.push(cur); redraw(); padState(); });
 cv.addEventListener("pointermove", e => { if (!cur) return; const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e]; (evs.length?evs:[e]).forEach(ev => { const p = pt(ev); seg(cur[cur.length-1], p, cv.width/dpr, ctx); cur.push(p); }); });
 const end = () => { if (cur){ cur = null; padState(); } };
 cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
