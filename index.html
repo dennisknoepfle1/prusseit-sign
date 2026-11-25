@@ -175,6 +175,20 @@ p{margin:0}
 .pill{font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;background:var(--red-soft);color:var(--red-ink);white-space:nowrap}
 .pill.ok{background:var(--ok-soft);color:var(--ok)}
 .pill.ok::before{content:"✓ "}
+.pill.bad{background:var(--red);color:#fff}
+.arch-row .mailst{display:block;margin-top:2px;font-size:12.5px}
+.arch-row .mailst.ok{color:var(--ok)}
+.arch-row .mailst.bad{color:var(--red-ink);font-weight:600}
+.panel.qr{align-items:center;text-align:center}
+.qr-box{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;cursor:zoom-in;line-height:0;width:200px;height:200px;display:grid;place-items:center;transition:transform .2s var(--ease)}
+.qr-box svg{width:100%;height:100%;display:block}
+.qr-box:active{transform:scale(.98)}
+.qr-st{font-size:13px;color:var(--muted);margin:0}
+.qr-st.ok{color:var(--ok);font-weight:600}
+.panel.qr.big{position:fixed;inset:0;z-index:60;border-radius:0;justify-content:center;gap:22px;background:var(--surface)}
+.panel.qr.big .qr-box{width:min(70vw,60vh);height:min(70vw,60vh);cursor:zoom-out}
+.panel.qr.big h3{font-size:28px}
+.panel.qr.big .hint{font-size:18px;max-width:520px}
 .pill.mute{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
 .hint{font-size:14px;color:var(--muted)}
 .empty{font-size:14px;color:var(--muted);padding:14px;border:1px dashed var(--line-2);border-radius:var(--r-sm);text-align:center}
@@ -599,6 +613,12 @@ body.customer .steps,body.customer .user{visibility:hidden}
     <div class="work">
       <div class="viewer" id="finalViewer"></div>
       <aside class="side">
+        <div class="panel qr" id="qrPanel" hidden>
+          <h3>Vertrag aufs Handy</h3>
+          <button class="qr-box" id="qrBox" type="button" aria-label="QR-Code groß anzeigen"></button>
+          <p class="hint">Scannen Sie den Code mit der Kamera Ihres Handys. Ihr Vertrag wird sofort als PDF geladen, unabhängig von der E-Mail.</p>
+          <p class="qr-st" id="qrSt"></p>
+        </div>
         <div class="panel">
           <h3>Status</h3>
           <ol class="track" id="track">
@@ -617,7 +637,7 @@ body.customer .steps,body.customer .user{visibility:hidden}
         <div class="panel mail">
           <h3>Versand per E-Mail</h3>
           <label class="fld"><span class="label">E-Mail Kunde</span><input id="mailAddr" type="email" autocomplete="off" placeholder="kunde@beispiel.de"></label>
-          <p class="hint">Der Kunde bekommt das PDF, Antworten gehen an dich. Das PDF liegt außerdem im Archiv.</p>
+          <p class="hint">Der Kunde bekommt das PDF als Anhang und als Download-Link, Antworten gehen an dich. Ob die Mail ankommt, siehst du oben und im Archiv.</p>
           <button class="btn dark block" id="sendMail">Erneut senden</button>
           <p class="toast" id="mailMsg" hidden></p>
         </div>
@@ -686,7 +706,8 @@ let me = null; // { id, email, full_name, role }
 const REMOTE = new URLSearchParams(location.search).get("sign"); // Kunde öffnet einen Unterschriftslink
 // Unterschrieben wird nur auf dem iPad (Touch-Gerät); am PC wird nur vorbereitet
 let OPEN_ID = new URLSearchParams(location.search).get("open");
-if (OPEN_ID) history.replaceState(null, "", location.pathname);
+let OPEN_ARCH = new URLSearchParams(location.search).has("archiv"); // Push „Vertrag nicht zugestellt“
+if (OPEN_ID || OPEN_ARCH) history.replaceState(null, "", location.pathname);
 const SIGN_DEVICE = matchMedia("(pointer: coarse)").matches || (navigator.maxTouchPoints > 1 && /Macintosh|iPad/.test(navigator.userAgent));
 
 const S = { step:1, orig:null, origHash:"", fileName:"", fields:[], placing:null, locked:false, final:null, finalHash:"", meta:{}, maxStep:1 };
@@ -1064,12 +1085,14 @@ async function archiveFinal(){
   trk("tSave", "run", "Wird gespeichert …"); trk("tSeal", "", "Wartet …"); trk("tMail", "", "Wartet …");
   // Reihenfolge bleibt erhalten: erst das PDF, dann Siegel, dann Versand. Ohne Internet wird alles automatisch nachgeholt.
   await enqueue("final", { bytes:S.final, hash:S.finalHash, pages:S.pageSizes.length + (S.protoPages||1) });
+  await enqueue("link", { token:newToken() }); // QR-Code zum Download aufs Handy des Kunden
   await enqueue("seal", {});
   await enqueue("send", {});
 }
 /* Rückmeldungen aus dem Ausgangskorb auf dem Abschluss-Bildschirm anzeigen */
 function finalUi(item, state, res){
   if (item.deal !== S.dealId || !S.final) return;
+  if (item.op === "link"){ if (state === "ok") showQr(res); else if (state === "wait") qrSt("Wird bereitgestellt, sobald das iPad wieder online ist …"); else if (state !== "run") qrSt("QR-Code nicht verfügbar. Der Kunde bekommt das PDF per E-Mail."); return; }
   const id = { final:"tSave", seal:"tSeal", send:"tMail" }[item.op]; if (!id) return;
   if (state === "wait"){ trk(id, "run", "Kein Internet: wird automatisch nachgeholt, sobald die Verbindung wieder da ist. Du kannst schon weitermachen."); return; }
   if (state === "run"){ trk(id, "run", item.op==="final" ? "Wird gespeichert …" : item.op==="seal" ? "Firmensiegel und Zeitstempel werden angebracht …" : "Wird verschickt …"); return; }
@@ -1089,7 +1112,7 @@ function finalUi(item, state, res){
     if (state === "ok"){
       const r = res?.results || {};
       if (r.mail) trk("tMail", "err", "Mailversand ist noch nicht eingerichtet. Das PDF liegt im Archiv.");
-      else if (S.meta.mail){ S.sent = true; $("#sendMail").textContent = "Erneut senden"; trk("tMail", "ok", "An " + S.meta.mail + ", Antworten gehen an dich."); }
+      else if (S.meta.mail){ S.sent = true; $("#sendMail").textContent = "Erneut senden"; trk("tMail", "ok", "An " + S.meta.mail + " verschickt. Zustellung wird geprüft …"); watchDelivery(); }
       else trk("tMail", "", "Keine E-Mail-Adresse. Trag sie unten ein und tippe auf Senden.");
     } else trk("tMail", "err", "Versand fehlgeschlagen: " + res);
   }
@@ -1150,12 +1173,17 @@ const OPS = {
     const a = await sb.from("audit_events").insert({ deal_id:it.deal, event:"completed", details:{ final_sha256:it.data.hash, pages:it.data.pages, client_time:it.at, ua:navigator.userAgent } });
     if (a.error) throw errOf(a, "Protokoll");
   },
+  async link(it){
+    const r = await sb.from("pdf_links").insert({ deal_id:it.deal, channel:"qr", token_hash:await sha256(new TextEncoder().encode(it.data.token)) });
+    if (r.error && r.error.code !== "23505") throw errOf(r, "Download-Link");
+    return it.data.token;
+  },
   seal: it => fnCall("seal-contract", { deal_id:it.deal }),
   send: it => fnCall("send-contract", { deal_id:it.deal, resend:false }),
   ready: it => fnCall("remote-sign", { action:"ready", deal_id:it.deal }),
 };
 // Diese Schritte dürfen bei einem echten Fehler übersprungen werden, ohne dass Daten fehlen (das PDF ist dann schon im Archiv)
-const SOFT = new Set(["seal","send","ready"]);
+const SOFT = new Set(["seal","send","ready","link"]);
 async function flush(){
   if (!me) return;
   if (OB.busy){ OB.again = true; return; } // läuft schon: danach sofort noch eine Runde für neu hinzugekommene Einträge
@@ -1635,6 +1663,7 @@ function hideHand(){ $("#hand").hidden = true; document.body.style.overflow = ""
 function handProceed(){
   if (handMode==="info"){ if (infoAction) infoAction(); return; }
   if (handMode==="remote"){ sendRemote(); return; }
+  if (handMode==="remail"){ sendRemail(); return; }
   if (handMode==="toKd"){
     hideHand(); S.phase = "kd"; go(3, true);
     const n = S.fields.find(f => isSig(f) && f.role==="kd" && !f.sig); if (n) setTimeout(() => jumpTo(n), 80);
@@ -1852,6 +1881,7 @@ async function showFinal(now){
   $("#saveMsg").hidden = true; $("#mailMsg").hidden = true;
   ["tSave","tSeal","tMail"].forEach(id => trk(id, "", "Wartet …")); $("#sealBadge").classList.remove("on");
   $("#savePdf").hidden = false;
+  $("#qrPanel").hidden = true; $("#qrPanel").classList.remove("big"); $("#qrBox").innerHTML = ""; qrSt(""); clearTimeout(S.watchT);
   await renderDoc(S.final, $("#finalViewer"), false);
 }
 $("#savePdf").addEventListener("click", async () => {
@@ -1864,6 +1894,39 @@ $("#savePdf").addEventListener("click", async () => {
   try { await downloads.save({ filename: S.fileName.endsWith(".pdf") ? S.fileName.replace(/\.pdf$/,"_unterschrieben.pdf").replace("_unterschrieben_unterschrieben","_unterschrieben") : S.fileName + ".pdf", data: new Blob([S.sealed || S.final], {type:"application/pdf"}) }); m.textContent = "PDF gespeichert."; }
   catch(e){ m.classList.add("err"); m.textContent = e?.code==="declined" ? "Speichern abgebrochen." : "Speichern hat nicht geklappt. Bitte noch einmal versuchen."; }
 });
+/* ---------- QR-Code: Kunde lädt das PDF direkt aufs eigene Handy ----------
+   Der Link (30 Tage gültig) führt über die Edge Function contract-pdf auf das versiegelte PDF; jeder Abruf landet im Prüfprotokoll. */
+const newToken = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+const pdfLinkUrl = t => SB_URL + "/functions/v1/contract-pdf?t=" + t;
+let qrLib = null;
+const loadQr = () => qrLib ||= new Promise((res, rej) => { const s = document.createElement("script"); s.src = "qrcode.js"; s.onload = () => res(window.qrcode); s.onerror = () => { qrLib = null; rej(new Error("QR-Bibliothek nicht geladen")); }; document.head.appendChild(s); });
+function qrSt(t, ok){ const p = $("#qrSt"); p.textContent = t; p.classList.toggle("ok", !!ok); }
+async function showQr(token){
+  try {
+    const qr = (await loadQr())(0, "M"); qr.addData(pdfLinkUrl(token)); qr.make();
+    $("#qrBox").innerHTML = qr.createSvgTag({ cellSize:4, margin:2, scalable:true });
+    $("#qrPanel").hidden = false; animate($("#qrPanel")); qrSt("Noch nicht geladen");
+    watchDelivery();
+  } catch(e){ console.warn("QR", e); }
+}
+$("#qrBox").addEventListener("click", () => { const p = $("#qrPanel"); p.classList.toggle("big"); document.body.style.overflow = p.classList.contains("big") ? "hidden" : ""; });
+const MAILST = { delivered:["ok","Zugestellt an "], delayed:["","Verzögert, wird weiter versucht: "], bounced:["err","Nicht zugestellt, Adresse prüfen: "], failed:["err","Nicht zugestellt, Adresse prüfen: "], complained:["err","Vom Kunden als Spam markiert: "] };
+// Auf dem Abschluss-Bildschirm nachsehen, ob die Mail angekommen ist und ob der Kunde das PDF per QR-Code geladen hat
+function watchDelivery(){
+  clearTimeout(S.watchT);
+  const deal = S.dealId, t0 = Date.now();
+  const tick = async () => {
+    if (S.dealId !== deal || !S.final || $("#s4").hidden) return;
+    const { data } = await sb.from("deals").select("mail_status,mail_to,downloaded_at").eq("id", deal).maybeSingle();
+    if (S.dealId !== deal) return;
+    if (data?.downloaded_at) qrSt("✓ Vom Kunden aufs Handy geladen", true);
+    const m = MAILST[data?.mail_status];
+    if (m && S.sent) trk("tMail", m[0], m[1] + (data.mail_to || S.meta.mail));
+    const settled = data?.downloaded_at && data?.mail_status && data.mail_status !== "sent";
+    if (!settled && Date.now() - t0 < 15 * 60000) S.watchT = setTimeout(tick, 5000);
+  };
+  S.watchT = setTimeout(tick, 3000);
+}
 /* ---------- Versand (Edge Function send-contract) ---------- */
 async function sendContract(resend){
   const m = $("#mailMsg"), b = $("#sendMail");
@@ -1881,13 +1944,13 @@ async function sendContract(resend){
     const r = data?.results || {};
     if (r.mail) throw new Error("Mailversand ist noch nicht eingerichtet. Das PDF liegt im Archiv.");
     S.sent = !!S.meta.mail; b.textContent = S.sent ? "Erneut senden" : "Senden";
-    if (S.meta.mail){ trk("tMail", "ok", "An " + S.meta.mail + ", Antworten gehen an dich."); if (resend){ m.hidden = false; m.textContent = "Erneut verschickt an " + S.meta.mail + "."; } }
+    if (S.meta.mail){ trk("tMail", "ok", "An " + S.meta.mail + " verschickt. Zustellung wird geprüft …"); watchDelivery(); if (resend){ m.hidden = false; m.textContent = "Erneut verschickt an " + S.meta.mail + "."; } }
     else trk("tMail", "", "Keine E-Mail-Adresse. Trag sie unten ein und tippe auf Senden.");
   } catch(e){ console.error(e); trk("tMail", "err", "Versand fehlgeschlagen: " + (e.message||e)); }
   finally { b.disabled = false; }
 }
 $("#sendMail").addEventListener("click", () => sendContract(S.sent));
-function resetDeal(){ S.sellerEmail = null; Object.values(AUTO).forEach(([q]) => { delete $(q).dataset.auto; $(q).classList.remove("autofill"); }); $("#autoHint").hidden = true; S.printName = ""; S.ocrBusy = false; S.kvOcr = null; S.phase = "vk"; views.forEach(v => { v.io.disconnect(); v.pdf.destroy(); }); views.clear(); S.orig=null; S.fields=[]; S.locked=false; S.dbLocked=false; S.dealId=null; S.final=null; S.maxStep=1; $("#viewer").innerHTML=""; $("#finalViewer").innerHTML=""; ["#mNr","#mKd","#mMail","#mFz"].forEach(q => $(q).value = ""); S.kv = null; S.atts = []; S.parts = null; S.kvData = null; S.autoSigs = null; $("#quickBox").hidden = true; S.sealed = null; S.finalHash = null; S.draftReady = false; S.actField = null; S.fresh = null; $("#pdfIn").value = ""; $("#attIn").value = ""; $("#mailAddr").value = ""; showDocs(); }
+function resetDeal(){ clearTimeout(S.watchT); if ($("#qrPanel").classList.contains("big")){ $("#qrPanel").classList.remove("big"); document.body.style.overflow = ""; } S.sellerEmail = null; Object.values(AUTO).forEach(([q]) => { delete $(q).dataset.auto; $(q).classList.remove("autofill"); }); $("#autoHint").hidden = true; S.printName = ""; S.ocrBusy = false; S.kvOcr = null; S.phase = "vk"; views.forEach(v => { v.io.disconnect(); v.pdf.destroy(); }); views.clear(); S.orig=null; S.fields=[]; S.locked=false; S.dbLocked=false; S.dealId=null; S.final=null; S.maxStep=1; $("#viewer").innerHTML=""; $("#finalViewer").innerHTML=""; ["#mNr","#mKd","#mMail","#mFz"].forEach(q => $(q).value = ""); S.kv = null; S.atts = []; S.parts = null; S.kvData = null; S.autoSigs = null; $("#quickBox").hidden = true; S.sealed = null; S.finalHash = null; S.draftReady = false; S.actField = null; S.fresh = null; $("#pdfIn").value = ""; $("#attIn").value = ""; $("#mailAddr").value = ""; showDocs(); }
 $("#restart").addEventListener("click", () => { resetDeal(); go(1); });
 
 /* ---------- Anmeldung ---------- */
@@ -1957,6 +2020,7 @@ async function onSession(session){
   OB.wait = 2000; flush();
   pushState().catch(() => {}); watchReady();
   if (OPEN_ID){ const id = OPEN_ID; OPEN_ID = null; openFromPush(id); }
+  else if (OPEN_ARCH){ OPEN_ARCH = false; showArchive(); }
 }
 sb.auth.onAuthStateChange((_ev, session) => { setTimeout(() => onSession(session), 0); });
 
@@ -1968,9 +2032,9 @@ async function showArchive(){
   document.querySelector(".steps").hidden = true; $("#sA").hidden = false; $("#navArch").setAttribute("aria-current","page"); animate($("#sA")); $("#navHome").hidden = false;
   $("#archLede").textContent = me.role==="admin" ? "Alle Vorgänge aller Verkäufer." : "Deine Vorgänge.";
   const list = $("#archList"); list.innerHTML = '<p class="empty">Wird geladen …</p>';
-  const { data, error } = await sb.from("deals").select("id,contract_no,vehicle,customer_name,customer_email,status,created_at,updated_at,signed_at,locked_at,final_path,sealed_path,original_path,draft,fields,profiles(full_name,email)").order("created_at", { ascending:false }).limit(500);
+  const { data, error } = await sb.from("deals").select("id,contract_no,vehicle,customer_name,customer_email,status,created_at,updated_at,signed_at,locked_at,final_path,sealed_path,original_path,draft,fields,mail_status,mail_to,mail_status_at,downloaded_at,profiles(full_name,email)").order("created_at", { ascending:false }).limit(500);
   if (error){ list.innerHTML = ""; const p = document.createElement("p"); p.className = "toast err"; p.textContent = "Archiv konnte nicht geladen werden: " + error.message; list.appendChild(p); return; }
-  archRows = data; renderArchive(); pushState().catch(() => {});
+  archRows = data; renderArchive(); pushState().catch(() => {}); recheckMail();
   const mon = new Date(); mon.setDate(1); mon.setHours(0,0,0,0);
   const st = $("#archStats"); st.innerHTML = "";
   [[data.length, "Vorgänge gesamt"], [data.filter(r => r.signed_at && new Date(r.signed_at) >= mon).length, "Verkauft diesen Monat", true], [data.filter(isOpen).length, "Offen"]].forEach(([n, l, acc]) => {
@@ -1994,9 +2058,12 @@ function renderArchive(){
     const a = document.createElement("div"); const b = document.createElement("b"); b.textContent = r.customer_name;
     const sm = document.createElement("small"); sm.textContent = [r.contract_no, r.vehicle, fmtDT(new Date(r.created_at))].filter(Boolean).join(" · ");
     a.append(b, sm);
+    const ms = mailLine(r); if (ms) a.appendChild(ms);
     const s = document.createElement("small"); s.className = "seller"; s.textContent = r.profiles?.full_name || r.profiles?.email || "";
     const pill = document.createElement("span"); pill.className = "pill" + (r.final_path ? " ok" : r.status==="remote_signed" ? " go" : r.status==="cancelled" ? " mute" : "");
-    pill.textContent = r.status==="draft" ? (r.draft?.ready ? "wartet aufs iPad" : "in Vorbereitung") : r.status==="signing" ? "Unterschrift unterbrochen" : (STATUS[r.status] || r.status);
+    const bad = r.final_path && ["bounced","failed","complained"].includes(r.mail_status);
+    if (bad) pill.className = "pill bad";
+    pill.textContent = bad ? "Mail nicht angekommen" : r.status==="draft" ? (r.draft?.ready ? "wartet aufs iPad" : "in Vorbereitung") : r.status==="signing" ? "Unterschrift unterbrochen" : (STATUS[r.status] || r.status);
     const acts = document.createElement("div"); acts.className = "acts";
     const act = (label, fn) => { const x = document.createElement("button"); x.className = "btn primary small"; x.textContent = label; x.addEventListener("click", async () => { x.disabled = true; const t = x.textContent; x.textContent = "Wird geladen …"; try { await fn(); } finally { x.disabled = false; x.textContent = t; } }); acts.appendChild(x); };
     const signingNow = r.status==="signing" || (r.status==="draft" && r.locked_at);
@@ -2004,6 +2071,7 @@ function renderArchive(){
     if (!r.final_path && signingNow){ if (SIGN_DEVICE) act("Fortsetzen", () => resumeDeal(r, false)); else { const x = document.createElement("button"); x.className = "btn small"; x.textContent = "Nur am iPad"; x.disabled = true; acts.appendChild(x); } }
     if (r.status==="remote_signed" && !r.final_path) act("Abschließen", () => completeRemote(r));
     if (isOpen(r) && r.status!=="remote_signed"){ const x = document.createElement("button"); x.className = "btn small quiet"; x.textContent = "Stornieren"; x.addEventListener("click", async () => { await cancelDeal(r); showArchive(); }); acts.appendChild(x); }
+    if (r.final_path){ const x = document.createElement("button"); x.className = "btn small" + (bad ? " primary" : ""); x.textContent = bad ? "Erneut senden" : "Mail"; x.addEventListener("click", () => showRemail(r)); acts.appendChild(x); }
     const btn = document.createElement("button"); btn.className = "btn small"; btn.textContent = "PDF";
     const path = r.sealed_path || r.final_path || r.original_path; btn.disabled = !path;
     btn.addEventListener("click", async () => {
@@ -2018,6 +2086,47 @@ function renderArchive(){
   });
 }
 $("#archQ").addEventListener("input", renderArchive);
+/* Zustellung im Archiv: Status der Kundenmail und ob der Kunde das PDF per QR-Code geladen hat */
+function mailLine(r){
+  if (!r.final_path) return null;
+  const el = document.createElement("small"); el.className = "mailst";
+  const to = r.mail_to || r.customer_email || "";
+  const t = { delivered:["ok","✉ Zugestellt an " + to], delayed:["","✉ Zustellung verzögert: " + to], bounced:["bad","✉ Nicht zugestellt: " + to], failed:["bad","✉ Nicht zugestellt: " + to], complained:["bad","✉ Als Spam markiert: " + to], sent:["","✉ Verschickt an " + to + ", Zustellung offen"] }[r.mail_status]
+    || (r.status === "sent" ? ["","✉ Verschickt an " + to] : ["bad","✉ Noch nicht verschickt"]);
+  el.classList.add(...[t[0]].filter(Boolean)); el.textContent = t[1] + (r.downloaded_at ? " · PDF per QR-Code geladen" : "");
+  return el;
+}
+// Hängt eine Zustellung (Webhook verloren oder noch nicht eingerichtet), fragt der Server bei Resend nach. Einmal pro Sitzung.
+let mailChecked = false;
+function recheckMail(){
+  if (mailChecked || !archRows.some(r => ["sent","delayed"].includes(r.mail_status) && Date.now() - Date.parse(r.mail_status_at) > 10 * 60000)) return;
+  mailChecked = true;
+  fnCall("mail-events", { all:true }).then(res => { if (res?.checked && !$("#sA").hidden) showArchive(); }).catch(e => { mailChecked = false; console.warn("Zustellstatus", e); });
+}
+// Erneut senden, auf Wunsch an eine andere Adresse
+let remailDeal = null;
+function showRemail(r){
+  remailDeal = r; handMode = "remail";
+  $("#handTitle").textContent = "Vertrag erneut senden";
+  $("#handText").textContent = r.customer_name + " bekommt das PDF als Anhang und als Download-Link. Prüf die Adresse, gerade wenn die letzte Mail nicht angekommen ist.";
+  $("#handWho").hidden = true; $("#handMailRow").hidden = false; $("#handMail").value = r.customer_email || r.mail_to || "";
+  $("#handGo").hidden = false; $("#handGo").disabled = false; $("#handGo").classList.remove("hold","go"); $("#handGoTx").textContent = "Senden";
+  $("#handBack").hidden = false; $("#handBack").textContent = "Abbrechen";
+  const h = $("#hand"); h.hidden = false; animate(h.querySelector(".hand-in")); document.body.style.overflow = "hidden";
+}
+async function sendRemail(){
+  const r = remailDeal, email = $("#handMail").value.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ alert("Bitte eine gültige E-Mail-Adresse des Kunden eintragen."); $("#handMail").focus(); return; }
+  $("#handGo").disabled = true; $("#handGoTx").textContent = "Wird gesendet …"; $("#handBack").hidden = true;
+  try {
+    if (email !== (r.customer_email || "").toLowerCase()){
+      const u = await sb.from("deals").update({ customer_email:email }).eq("id", r.id); if (u.error) throw u.error;
+      await sb.from("audit_events").insert({ deal_id:r.id, event:"customer_email_changed", details:{ email, before:r.customer_email || null } });
+    }
+    await fnCall("send-contract", { deal_id:r.id, resend:true });
+    showInfo("Verschickt", "Der Vertrag ist an " + email + " unterwegs. Ob er angekommen ist, siehst du in ein paar Minuten im Archiv.", { btn:"Fertig", action:() => { hideHand(); showArchive(); } });
+  } catch(e){ console.error(e); $("#handGo").disabled = false; $("#handGoTx").textContent = "Senden"; $("#handBack").hidden = false; alert("Senden hat nicht geklappt: " + (e.message||e)); }
+}
 
 /* ---------- Push „Fahrzeug verkauft“ (für Admins) ---------- */
 const VAPID_PUBLIC = "BL2pqdwCpn4ZuBjFonRhHZDgTUa0jUi2OBy6jI_A0Xx8GHqesg0CTikP2ZgH8JXF3ilVBqv_DYbMFZiqpjQapxc";
