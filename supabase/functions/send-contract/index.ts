@@ -1,6 +1,8 @@
 // Versendet den fertig unterschriebenen Vertrag per Mail (Resend) an den Kunden (keine interne Kopie, das PDF liegt im Archiv)
 // und schickt eine Push-Nachricht „Fahrzeug verkauft“ an alle Admins.
-// Aufruf aus der App: POST { deal_id }, mit dem Login des Verkäufers (JWT).
+// Aufruf aus der App: POST { deal_id, resend? }, mit dem Login des Verkäufers (JWT).
+// Die Mail enthält das PDF als Anhang und zusätzlich einen persönlichen Download-Link (30 Tage, jeder Abruf wird protokolliert).
+// Nur wenn das PDF für Mailserver zu groß wäre, geht allein der Link raus. Mail-ID und Zustellstatus stehen am Vorgang (deals.mail_*).
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import webpush from "npm:web-push@3.6.7";
 
@@ -19,6 +21,11 @@ const cors = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 const esc = (s: string) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
+const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join("");
+const sha256 = async (s: string) => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
+const token = () => { const b = crypto.getRandomValues(new Uint8Array(32)); return btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
+// Ab dieser Größe nur noch Link: als Anhang wird das PDF rund ein Drittel größer, viele Postfächer nehmen höchstens 20 MB an
+const MAX_ATTACH = 14 * 1024 * 1024;
 const b64 = (u: Uint8Array) => { let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
 
 function shell(inner: string) {
@@ -72,25 +79,37 @@ Deno.serve(async (req) => {
     } else {
       const dl = await admin.storage.from("contracts").download(deal.sealed_path ?? deal.final_path);
       if (dl.error) throw dl.error;
-      const pdf = b64(new Uint8Array(await dl.data.arrayBuffer()));
-      const attachments = [{ filename: fileName, content: pdf }];
+      const bytes = new Uint8Array(await dl.data.arrayBuffer());
+      const attach = bytes.length <= MAX_ATTACH;
       const from = `${sellerName.replace(/[<>"]/g, "")} · Autowelt Prusseit <${FROM_ADDR}>`;
 
       if (deal.customer_email) {
+        // Persönlicher Download-Link als zweiter Weg zum PDF
+        const t = token();
+        const { data: link, error: le } = await admin.from("pdf_links").insert({ deal_id: deal.id, token_hash: await sha256(t), channel: "mail", created_by: deal.seller_id }).select("expires_at").single();
+        if (le) throw le;
+        const url = `${SB_URL}/functions/v1/contract-pdf?t=${t}`;
+        const until = new Date(link.expires_at).toLocaleDateString("de-DE", { timeZone: "Europe/Berlin" });
+        const intro = attach
+          ? `anbei erhalten Sie Ihren unterschriebenen Kaufvertrag${nr ? " " + esc(nr) : ""} als PDF. Die letzten Seiten enthalten das Prüfprotokoll der elektronischen Unterzeichnung.`
+          : `Ihr unterschriebener Kaufvertrag${nr ? " " + esc(nr) : ""} ist zu groß für einen E-Mail-Anhang. Sie können ihn über den folgenden Link als PDF herunterladen und speichern. Die letzten Seiten enthalten das Prüfprotokoll der elektronischen Unterzeichnung.`;
+        const btn = `<p style="margin:22px 0"><a href="${url}" style="display:inline-block;background:#E3001B;color:#fff;text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:6px">Vertrag als PDF herunterladen</a></p>
+<p style="font-size:13px;color:#6a6265">${attach ? "Falls sich der Anhang nicht öffnen lässt: " : ""}Der Link ist bis zum ${until} gültig. Bitte speichern Sie das PDF bei sich.</p>`;
         results.customer = await sendMail({
           from, to: [deal.customer_email], reply_to: seller?.email ? [seller.email] : undefined,
           subject: `Ihr Kaufvertrag ${nr} – Autowelt Prusseit`.replace("  ", " "),
           html: shell(`<p>Guten Tag ${esc(deal.customer_name)},</p>
-<p>anbei erhalten Sie Ihren unterschriebenen Kaufvertrag${nr ? " " + esc(nr) : ""} als PDF. Die letzten Seiten enthalten das Prüfprotokoll der elektronischen Unterzeichnung.</p>
+<p>${intro}</p>
+${btn}
 <p>Vielen Dank für Ihr Vertrauen.</p>
 <p>Mit freundlichen Grüßen<br>${esc(sellerName)}<br>Autowelt Prusseit GmbH</p>`),
-          text: `Guten Tag ${deal.customer_name},\n\nanbei erhalten Sie Ihren unterschriebenen Kaufvertrag ${nr} als PDF. Die letzten Seiten enthalten das Prüfprotokoll der elektronischen Unterzeichnung.\n\nMit freundlichen Grüßen\n${sellerName}\nAutowelt Prusseit GmbH`,
-          attachments,
+          text: `Guten Tag ${deal.customer_name},\n\n${intro.replace(/&[a-z]+;/g, "")}\n\nVertrag als PDF herunterladen (gültig bis ${until}):\n${url}\n\nMit freundlichen Grüßen\n${sellerName}\nAutowelt Prusseit GmbH`,
+          attachments: attach ? [{ filename: fileName, content: b64(bytes) }] : undefined,
         });
       }
       if (results.customer) {
-        await user.from("deals").update({ status: "sent" }).eq("id", deal.id);
-        await user.from("audit_events").insert({ deal_id: deal.id, event: "mailed", details: { customer: deal.customer_email, ids: results } });
+        await user.from("deals").update({ status: "sent", mail_id: results.customer, mail_to: deal.customer_email, mail_status: "sent", mail_status_at: new Date().toISOString() }).eq("id", deal.id);
+        await user.from("audit_events").insert({ deal_id: deal.id, event: "mailed", details: { customer: deal.customer_email, ids: results, attached: attach, bytes: bytes.length, resend: !!resend } });
       }
     }
 
