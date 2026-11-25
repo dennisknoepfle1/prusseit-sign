@@ -25,7 +25,7 @@ const json = (body: unknown, status = 200) =>
 const MAP: Record<string, string> = {
   sent: "sent", queued: "sent", scheduled: "sent",
   delivered: "delivered", opened: "delivered", clicked: "delivered",
-  delivery_delayed: "delayed", bounced: "bounced", complained: "complained", failed: "failed", canceled: "failed",
+  delivery_delayed: "delayed", bounced: "bounced", complained: "complained", failed: "failed", canceled: "failed", suppressed: "failed",
 };
 const BAD = new Set(["bounced", "failed"]);
 // Ereignisse kommen nicht immer in der richtigen Reihenfolge: ein späteres „sent“ darf „delivered“ nicht überschreiben
