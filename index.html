@@ -48,7 +48,7 @@
 html,body{height:100%}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.45;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bar)}
-button,input{font:inherit;color:inherit}
+button,input,select{font:inherit;color:inherit}
 .gutter{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 ::selection{background:var(--red);color:#fff}
 
@@ -102,9 +102,9 @@ p{margin:0}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:24px;display:flex;flex-direction:column;gap:16px;min-width:0;box-shadow:var(--sh-1)}
 .fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .fld{display:flex;flex-direction:column;gap:7px;min-width:0}
-.fld input{height:50px;padding:0 14px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface-2);transition:border-color .2s,box-shadow .2s,background .2s}
-.fld input:hover{border-color:var(--line-2)}
-.fld input:focus{outline:none;border-color:var(--red);background:var(--surface);box-shadow:0 0 0 4px rgba(227,0,27,.12)}
+.fld input,.fld select{height:50px;padding:0 14px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface-2);transition:border-color .2s,box-shadow .2s,background .2s}
+.fld input:hover,.fld select:hover{border-color:var(--line-2)}
+.fld input:focus,.fld select:focus{outline:none;border-color:var(--red);background:var(--surface);box-shadow:0 0 0 4px rgba(227,0,27,.12)}
 .actions{display:flex;gap:12px;flex-wrap:wrap}
 .btn{position:relative;min-height:52px;padding:0 22px;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--surface);font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:10px;font-size:16px;transition:transform .15s var(--ease),box-shadow .2s var(--ease),background .2s,border-color .2s,color .2s;-webkit-user-select:none;user-select:none}
 .btn:hover:not(:disabled){border-color:var(--line-2);box-shadow:var(--sh-1)}
@@ -209,6 +209,16 @@ p{margin:0}
 .docrow .btn{grid-column:2;grid-row:1/span 2}
 .docrow.ok{border-style:solid;border-color:color-mix(in srgb,var(--ok) 45%,transparent);background:var(--ok-soft)}
 .docrow.ok .hint{color:var(--ok)}
+.docrow .label em{font-style:normal;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--red);margin-left:6px}
+.docrow.ok .label em{color:var(--ok)}
+.docrow.req:not(.ok){border-color:color-mix(in srgb,var(--red) 40%,transparent)}
+.docrow.bad{border-style:solid;border-color:var(--red);background:color-mix(in srgb,var(--red) 7%,transparent)}
+.docrow.bad .hint{color:var(--red)}
+.rep-miss{margin:2px 0 0;color:var(--red);font-weight:600;font-size:14px}
+.waiver details{margin-top:16px}.waiver summary{cursor:pointer;color:var(--muted);font-size:13px;list-style:none}.waiver summary::-webkit-details-marker{display:none}
+.waiver .fields{margin-top:12px}.waiver .wl{margin:14px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:14px}
+.waiver .wl li{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-sm)}
+.waiver .wl li span{min-width:0;overflow-wrap:anywhere}
 .txtfield.opt{border-style:dotted;background:rgba(59,91,169,.04)}
 /* Textfelder: Verschieben/Entfernen/Größe nur am gerade bearbeiteten Feld, klein, damit der Text sichtbar bleibt */
 .txtfield > .grip,.txtfield > .x,.txtfield > .rs{opacity:0;pointer-events:none;transition:opacity .15s}
@@ -506,6 +516,19 @@ body.customer .steps,body.customer .user{visibility:hidden}
       <div class="panel"><h3 id="rankHead">Verkäufer diesen Monat</h3><ol class="rank" id="dashRank"></ol></div>
     </div>
     <div class="panel" style="margin-top:16px"><h3>Gerade offen<span class="live-dot" title="Aktualisiert sich automatisch"></span></h3><div class="arch" id="dashOpen"></div></div>
+    <div class="waiver"><details id="wvBox"><summary>Notfreigabe ohne CarVertical/Carfax</summary>
+      <div class="panel" style="margin-top:10px">
+        <p class="lede" style="margin:0;font-size:15px">Gilt für genau einen Vertrag und 24 Stunden. Der Verkäufer sieht davon nichts, bis ihm ein Bericht fehlt: dann geht es mit dieser Freigabe einfach weiter. Alles wird im Prüfprotokoll des Vorgangs vermerkt.</p>
+        <div class="fields">
+          <label class="fld"><span class="label">Verkäufer</span><select id="wvSeller"></select></label>
+          <label class="fld"><span class="label">Vorgangs-Nr. (optional)</span><input id="wvNr" autocomplete="off" placeholder="z. B. #96"></label>
+          <label class="fld" style="grid-column:1/-1"><span class="label">Grund</span><input id="wvReason" autocomplete="off" placeholder="z. B. Carfax-Server gestört, Bericht wird nachgereicht"></label>
+        </div>
+        <div class="actions"><button class="btn primary" id="wvGo">Einen Vertrag freigeben</button></div>
+        <p class="toast" id="wvMsg" hidden></p>
+        <ul class="wl" id="wvList"></ul>
+      </div>
+    </details></div>
   </section>
 
   <!-- 1 Vertrag -->
@@ -531,8 +554,11 @@ body.customer .steps,body.customer .user{visibility:hidden}
         <p class="auto-hint" id="autoHint" hidden></p>
         <div class="docs">
           <div class="docrow" id="kvRow"><span class="label">Kaufvertrag</span><span class="hint" id="kvName">Noch kein PDF gewählt. Tipp: PDFs einfach ins Fenster ziehen.</span><label class="btn small file">PDF wählen<input type="file" id="pdfIn" accept="application/pdf"></label></div>
-          <div class="docrow"><span class="label">Anlagen (optional)</span><span class="hint">z. B. CarVertical, Carfax. Werden ans Vertragsende angehängt und Vertragsbestandteil.</span><label class="btn small file">Anlage hinzufügen<input type="file" id="attIn" accept="application/pdf" multiple></label></div>
+          <div class="docrow req" id="cvRow"><span class="label">CarVertical-Bericht <em>Pflicht</em></span><span class="hint" id="cvName"></span><label class="btn small file">PDF wählen<input type="file" id="cvIn" accept="application/pdf"></label></div>
+          <div class="docrow req" id="cfRow"><span class="label">Carfax-Bericht <em>Pflicht</em></span><span class="hint" id="cfName"></span><label class="btn small file">PDF wählen<input type="file" id="cfIn" accept="application/pdf"></label></div>
+          <div class="docrow"><span class="label">Weitere Anlagen (optional)</span><span class="hint">Werden nach den Berichten ans Vertragsende angehängt und Vertragsbestandteil.</span><label class="btn small file">Anlage hinzufügen<input type="file" id="attIn" accept="application/pdf" multiple></label></div>
           <ul class="list" id="attList"></ul>
+          <p class="rep-miss" id="repMiss" hidden></p>
         </div>
         <div class="quick" id="quickBox" hidden>
           <h3>Alles erkannt, bitte kurz prüfen</h3>
@@ -922,6 +948,7 @@ async function readKvData(bytes){
     let model = null;
     if (kv) model = items.filter(it => it.y < kv.y - 14 && it.y > kv.y - 60 && it.x < W*0.35 && it.h >= 9.5 && !/^(ÜBER|\(\+\))/.test(it.s)).sort((a,b) => b.y - a.y)[0];
     out.fahrzeug = [model?.s, finV ? "FIN " + finV.s.toUpperCase() : null].filter(Boolean).join(" · ") || undefined;
+    if (finV) out.fin = finV.s.toUpperCase();
     return out;
   } finally { pdf.destroy(); }
 }
@@ -944,9 +971,9 @@ function quickShow(){
   const kd = $("#mKd").value.trim(), fz = $("#mFz").value.trim(), nr = $("#mNr").value.trim(), mail = $("#mMail").value.trim();
   q.hidden = !(S.kv && kd);
   if (q.hidden) return;
-  const rows = [["Vorgang", nr || "–"], ["Kunde", kd], ["E-Mail", mail || "fehlt"], ["Fahrzeug", fz || "–"], ["Dokumente", "Kaufvertrag" + (S.atts.length ? " + " + S.atts.length + (S.atts.length === 1 ? " Anlage" : " Anlagen") : "")]];
+  const rows = [["Vorgang", nr || "–"], ["Kunde", kd], ["E-Mail", mail || "fehlt"], ["Fahrzeug", fz || "–"], ["Dokumente", repIssues().length ? "fehlt: " + repIssues().map(x => x.short).join(", ") : "Kaufvertrag + CarVertical + Carfax" + (S.atts.length ? " + " + S.atts.length + (S.atts.length === 1 ? " weitere Anlage" : " weitere Anlagen") : "")]];
   const dl = $("#quickList"); dl.innerHTML = "";
-  rows.forEach(([k,v]) => { const dt = document.createElement("dt"); dt.textContent = k; const dd = document.createElement("dd"); dd.textContent = v; if (v === "fehlt") dd.className = "warn"; dl.append(dt, dd); });
+  rows.forEach(([k,v]) => { const dt = document.createElement("dt"); dt.textContent = k; const dd = document.createElement("dd"); dd.textContent = v; if (v === "fehlt" || /^fehlt:/.test(v)) dd.className = "warn"; dl.append(dt, dd); });
   q.classList.remove("pop"); void q.offsetWidth; q.classList.add("pop");
 }
 Object.values(AUTO).forEach(([q]) => $(q).addEventListener("input", e => { delete e.target.dataset.auto; e.target.classList.remove("autofill"); quickShow(); }));
@@ -1053,6 +1080,7 @@ async function createDeal(bytes){
   const u = await sb.from("deals").update({ original_path:path }).eq("id", S.dealId);
   if (u.error) throw u.error;
   await audit("created", { file:S.fileName, sha256:S.origHash, pages, parts:S.parts || null });
+  if (S.waiver) await audit("reports_waived", { waiver:S.waiver.id, missing:S.waiver.missing, reason:S.waiver.reason, approved_by:S.waiver.by });
 }
 const fieldGeo = () => S.fields.map(({id,kind,role,page,x,y,w,h,value,formName,label,caption,capX}) => ({id,kind:kind||"sig",role,page,x,y,w,h,value,formName,label,caption,capX}));
 /* Stand des Vorgangs sichern: Felder, Werte und bereits geleistete Unterschriften. So lässt sich ein abgebrochener Vorgang fortsetzen. */
@@ -1259,49 +1287,112 @@ document.addEventListener("click", async e => {
 });
 
 
-/* Kaufvertrag + Anlagen wählen, dann zu einem Dokument zusammenfügen */
-S.kv = null; S.atts = [];
+/* Kaufvertrag + Pflichtberichte (CarVertical, Carfax) + weitere Anlagen wählen, dann zu einem Dokument zusammenfügen */
+S.kv = null; S.atts = []; S.cv = null; S.cf = null; S.waiver = null;
 async function readPdf(file){
   const bytes = new Uint8Array(await file.arrayBuffer());
   const d = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption:true });
   return { name:file.name, bytes, pages:d.getPageCount(), size:bytes.length };
 }
 const pdfErr = n => "„" + n + "“ ließ sich nicht öffnen. Es ist vermutlich passwortgeschützt oder beschädigt.";
+/* Bericht erkennen: CarVertical oder Carfax (Text der ersten Seiten, Titel, zur Not Dateiname) und die FIN darin */
+const REP = { cv:"CarVertical", cf:"Carfax" };
+const VIN_RE = /\b[A-HJ-NPR-Z0-9]{17}\b/g;
+async function readReport(p){
+  let t = "";
+  try {
+    const pdf = await pdfjsLib.getDocument({ data: p.bytes.slice() }).promise;
+    try {
+      t = ((await pdf.getMetadata().catch(() => null))?.info?.Title || "") + "\n";
+      for (let i = 1; i <= Math.min(3, pdf.numPages); i++) t += (await (await pdf.getPage(i)).getTextContent()).items.map(it => it.str).join(" ") + "\n";
+    } finally { pdf.destroy(); }
+  } catch(e){ console.warn("Bericht lesen", e); }
+  const n = re => (t.match(re) || []).length;
+  const cv = n(/car\s?vertical/gi), cf = n(/carfax/gi);
+  let type = cv > cf ? "cv" : cf > cv ? "cf" : null;
+  if (!type) type = /car.?vertical/i.test(p.name) ? "cv" : /carfax/i.test(p.name) ? "cf" : null;
+  // FIN: frei stehend oder (bei CarVertical in Stücke zerteilt) hinter „FIN“/„VIN“; zum Abgleich zählt der Text ohne Leerzeichen
+  const T = t.toUpperCase(), vins = {}, add = v => { if (v && /\d/.test(v) && /[A-Z]/.test(v)) vins[v] = (vins[v] || 0) + 1; };
+  (T.match(VIN_RE) || []).forEach(add);
+  for (const m of T.matchAll(/\b(?:FIN|VIN|FAHRGESTELLNUMMER|FAHRZEUGKENNUNG)\s*:?\s*((?:[A-HJ-NPR-Z0-9]\s*){17})/g)) add(m[1].replace(/\s+/g, ""));
+  const vin = Object.entries(vins).sort((a,b) => b[1] - a[1])[0]?.[0] || null;
+  return { type, vin, compact:T.replace(/\s+/g, "") };
+}
+const kvFin = () => S.kvData?.fin || ($("#mFz").value.toUpperCase().match(VIN_RE) || [])[0] || null;
+/* Was fehlt oder passt nicht? Ohne beides geht kein Kaufvertrag raus. */
+function repIssues(){
+  const out = [], fin = kvFin();
+  for (const k of ["cv","cf"]){
+    const r = S[k];
+    if (!r) out.push({ k, short:REP[k], t:"Der " + REP[k] + "-Bericht fehlt." });
+    else if (fin && r.vin && !r.compact.includes(fin)) out.push({ k, short:REP[k] + " (falsche FIN)", t:"Der " + REP[k] + "-Bericht gehört zur FIN " + r.vin + ", der Kaufvertrag zur FIN " + fin + "." });
+  }
+  return out;
+}
+function repRow(k){
+  const r = S[k], bad = repIssues().find(x => x.k === k);
+  $("#" + k + "Row").classList.toggle("ok", !!r && !bad); $("#" + k + "Row").classList.toggle("bad", !!r && !!bad);
+  $("#" + k + "Name").textContent = !r ? "Fehlt noch. Ohne diesen Bericht kann kein Kaufvertrag erstellt werden."
+    : bad ? "✕ " + r.name + ": " + bad.t + " Bitte den richtigen Bericht wählen."
+    : "✓ " + r.name + " · " + r.pages + " S." + (r.vin ? " · FIN " + r.vin : "");
+}
 function showDocs(){
   $("#kvRow").classList.toggle("ok", !!S.kv);
   $("#kvName").textContent = S.kv ? "✓ " + S.kv.name + " · " + S.kv.pages + " Seiten" : "Noch kein PDF gewählt. Tipp: PDFs einfach ins Fenster ziehen.";
+  repRow("cv"); repRow("cf");
   const ul = $("#attList"); ul.innerHTML = "";
   S.atts.forEach((a,i) => {
     const li = document.createElement("li");
     const dot = document.createElement("span"); dot.className = "dot tx";
-    const tx = document.createElement("span"); tx.textContent = "Anlage " + (i+1) + ": " + a.name + " · " + a.pages + " S."; tx.style.minWidth = "0"; tx.style.overflowWrap = "anywhere";
+    const tx = document.createElement("span"); tx.textContent = "Weitere Anlage " + (i+1) + ": " + a.name + " · " + a.pages + " S."; tx.style.minWidth = "0"; tx.style.overflowWrap = "anywhere";
     const x = document.createElement("button"); x.className = "btn small"; x.textContent = "Entfernen";
     x.addEventListener("click", () => { S.atts.splice(i,1); showDocs(); quickShow(); });
     li.append(dot, tx, x); ul.appendChild(li);
   });
+  const miss = repIssues(), m = $("#repMiss");
+  m.hidden = !S.kv || !miss.length || !!S.waiver;
+  if (!m.hidden) m.textContent = miss.every(x => !S[x.k]) && miss.length === 2 ? "CarVertical- und Carfax-Bericht fehlen noch. Ohne beide geht es nicht weiter." : miss.map(x => x.t).join(" ") + " Ohne beide passenden Berichte geht es nicht weiter.";
   $("#startDeal").disabled = !S.kv;
+}
+/* Bericht in das richtige Fach legen. want = Fach, in das der Verkäufer ihn gelegt hat (oder null beim Reinziehen). */
+async function placeReport(p, want){
+  const r = await readReport(p);
+  if (!r.type) return want ? "„" + p.name + "“ ist weder ein CarVertical- noch ein Carfax-Bericht." : null;
+  S[r.type] = { ...p, vin:r.vin, compact:r.compact };
+  return want && want !== r.type ? "„" + p.name + "“ ist ein " + REP[r.type] + "-Bericht und wurde dort einsortiert." : "";
 }
 $("#pdfIn").addEventListener("change", async e => {
   const file = e.target.files[0]; e.target.value = ""; if (!file) return;
   await setKv(file);
+});
+for (const k of ["cv","cf"]) $("#" + k + "In").addEventListener("change", async e => {
+  const file = e.target.files[0]; e.target.value = ""; if (!file) return;
+  const err = $("#loadErr"); err.hidden = true;
+  let p; try { p = await readPdf(file); } catch { err.textContent = pdfErr(file.name); err.hidden = false; return; }
+  const msg = await placeReport(p, k);
+  if (msg){ err.textContent = msg; err.hidden = false; }
+  showDocs(); quickShow();
 });
 async function setKv(file, pre){
   const err = $("#loadErr"); err.hidden = true;
   try { S.kv = pre || await readPdf(file); } catch { err.textContent = pdfErr(file.name); err.hidden = false; }
   showDocs();
   if (S.kv) await readKvData(S.kv.bytes).then(applyKvData).catch(e => console.warn("Auslesen", e));
+  showDocs();
   // Bildseiten schon jetzt im Hintergrund lesen, während die Kundendaten eingetragen werden
   if (S.kv){ const bytes = S.kv.bytes, pages = S.kv.pages; const run = detectFields(bytes, pages).then(d => ocrFields(bytes, d.imagePages)); run.catch(() => {}); S.kvOcr = { bytes, run }; }
 }
-/* PDFs einfach ins Fenster ziehen: der Kaufvertrag wird erkannt, alles andere wird Anlage */
+/* PDFs einfach ins Fenster ziehen: Kaufvertrag, CarVertical und Carfax werden erkannt, alles andere wird weitere Anlage */
 async function dropPdfs(files){
   const err = $("#loadErr"); err.hidden = true;
   const pdfs = [...files].filter(f => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name));
   if (!pdfs.length){ err.textContent = "Bitte PDF-Dateien hineinziehen."; err.hidden = false; return; }
   const read = [];
   for (const f of pdfs){ try { const p = await readPdf(f); let kv = false; try { kv = (await readKvData(p.bytes)).isKv; } catch {} read.push({ f, p, kv }); } catch { err.textContent = pdfErr(f.name); err.hidden = false; } }
-  const main = read.find(r => r.kv) || (!S.kv ? read[0] : null);
-  for (const r of read) if (r !== main) S.atts.push(r.p);
+  const rest = [];
+  for (const r of read) if (!r.kv && (await placeReport(r.p, null)) === null) rest.push(r);
+  const main = read.find(r => r.kv) || (!S.kv ? rest[0] : null);
+  for (const r of rest) if (r !== main) S.atts.push(r.p);
   if (main) await setKv(main.f, main.p); else { showDocs(); quickShow(); }
 }
 let dragN = 0;
@@ -1313,9 +1404,32 @@ window.addEventListener("drop", e => { if (!dropOk()) return; e.preventDefault()
 $("#attIn").addEventListener("change", async e => {
   const files = [...e.target.files]; e.target.value = "";
   const err = $("#loadErr"); err.hidden = true;
-  for (const f of files){ try { S.atts.push(await readPdf(f)); } catch { err.textContent = pdfErr(f.name); err.hidden = false; } }
+  for (const f of files){
+    let p; try { p = await readPdf(f); } catch { err.textContent = pdfErr(f.name); err.hidden = false; continue; }
+    if ((await placeReport(p, null)) === null) S.atts.push(p); // Berichte landen immer in ihrem Pflichtfach
+  }
   showDocs(); quickShow();
 });
+$("#mFz").addEventListener("input", () => showDocs());
+/* Ohne beide Berichte kein Vertrag. Einziger Ausweg: eine Notfreigabe, die ein Admin vorher im Dashboard erteilt hat
+   (Verkäufer sehen davon nichts), oder ein Admin, der selbst einen Vertrag erstellt. */
+async function reportsOk(){
+  const miss = repIssues();
+  if (!miss.length || S.waiver) return true;
+  const err = $("#loadErr");
+  const block = () => { err.textContent = "Ohne CarVertical- und Carfax-Bericht zu diesem Fahrzeug kann kein Kaufvertrag erstellt werden. " + miss.map(x => x.t).join(" "); err.hidden = false; return false; };
+  if (me.role === "admin"){
+    const why = prompt("Admin-Notfreigabe: " + miss.map(x => x.t).join(" ") + "\n\nTrotzdem diesen einen Vertrag freigeben? Bitte den Grund eintragen:");
+    if (!why || !why.trim()) return block();
+    const ins = await sb.from("report_waivers").insert({ seller_id:me.id, created_by:me.id, contract_no:S.meta.vorgang || null, reason:why.trim() });
+    if (ins.error){ err.textContent = "Freigabe hat nicht geklappt: " + ins.error.message; err.hidden = false; return false; }
+  }
+  const { data, error } = await sb.rpc("use_report_waiver", { p_contract_no:S.meta.vorgang || null, p_missing:miss.map(x => x.short) });
+  if (error || !data?.ok){ if (error) console.warn("Freigabe", error); return block(); }
+  S.waiver = { id:data.id, reason:data.reason, by:data.by, missing:miss.map(x => x.short) };
+  showDocs();
+  return true;
+}
 $("#quickGo").addEventListener("click", () => $("#startDeal").click());
 $("#startDeal").addEventListener("click", async () => {
   readMeta();
@@ -1323,9 +1437,12 @@ $("#startDeal").addEventListener("click", async () => {
   if (!$("#mKd").value.trim()){ err.textContent = "Bitte den Namen des Kunden eintragen."; err.hidden = false; $("#mKd").focus(); return; }
   const b = $("#startDeal"); b.disabled = true; b.textContent = "Wird vorbereitet …";
   try {
-    const parts = [S.kv, ...S.atts];
+    if (!(await reportsOk())) return;
+    const bad = repIssues().map(x => x.k); // mit Notfreigabe: Berichte zu einem anderen Fahrzeug nicht anhängen
+    const reps = [["cv", S.cv], ["cf", S.cf]].filter(([k,r]) => r && !bad.includes(k));
+    const parts = [S.kv, ...reps.map(([,r]) => r), ...S.atts];
     let bytes = S.kv.bytes;
-    if (S.atts.length){
+    if (parts.length > 1){
       const out = await PDFLib.PDFDocument.create();
       for (const p of parts){
         const src = await PDFLib.PDFDocument.load(p.bytes, { ignoreEncryption:true });
@@ -1335,10 +1452,14 @@ $("#startDeal").addEventListener("click", async () => {
     }
     let from = 1;
     S.parts = [];
-    for (const [i,p] of parts.entries()){ S.parts.push({ kind: i ? "Anlage " + i : "Kaufvertrag", name:p.name, from, to:from+p.pages-1, sha256: await sha256(p.bytes) }); from += p.pages; }
+    for (const [i,p] of parts.entries()){
+      const rep = i && i <= reps.length ? REP[reps[i-1][0]] : null;
+      S.parts.push({ kind: i ? "Anlage " + i + (rep ? " (" + rep + ")" : "") : "Kaufvertrag", name:p.name, from, to:from+p.pages-1, sha256: await sha256(p.bytes), ...(rep ? { report:rep, vin:p.vin || null } : {}) });
+      from += p.pages;
+    }
     await loadDoc(bytes, [], S.kv.name.replace(/\.pdf$/i,"") + "_unterschrieben.pdf", { kvPages:S.kv.pages, kvBytes:S.kv.bytes });
   } catch(e){ console.error(e); err.textContent = "Zusammenfügen hat nicht geklappt: " + (e.message||e); err.hidden = false; }
-  finally { b.disabled = !S.kv; b.textContent = "Weiter zu den Feldern"; }
+  finally { b.disabled = !S.kv; b.innerHTML = 'Weiter zu den Feldern <span class="arrow">→</span>'; }
 });
 
 /* ---------- PDF anzeigen (seitenweise, nur sichtbare Seiten im Speicher) ---------- */
@@ -1950,7 +2071,7 @@ async function sendContract(resend){
   finally { b.disabled = false; }
 }
 $("#sendMail").addEventListener("click", () => sendContract(S.sent));
-function resetDeal(){ clearTimeout(S.watchT); if ($("#qrPanel").classList.contains("big")){ $("#qrPanel").classList.remove("big"); document.body.style.overflow = ""; } S.sellerEmail = null; Object.values(AUTO).forEach(([q]) => { delete $(q).dataset.auto; $(q).classList.remove("autofill"); }); $("#autoHint").hidden = true; S.printName = ""; S.ocrBusy = false; S.kvOcr = null; S.phase = "vk"; views.forEach(v => { v.io.disconnect(); v.pdf.destroy(); }); views.clear(); S.orig=null; S.fields=[]; S.locked=false; S.dbLocked=false; S.dealId=null; S.final=null; S.maxStep=1; $("#viewer").innerHTML=""; $("#finalViewer").innerHTML=""; ["#mNr","#mKd","#mMail","#mFz"].forEach(q => $(q).value = ""); S.kv = null; S.atts = []; S.parts = null; S.kvData = null; S.autoSigs = null; $("#quickBox").hidden = true; S.sealed = null; S.finalHash = null; S.draftReady = false; S.actField = null; S.fresh = null; $("#pdfIn").value = ""; $("#attIn").value = ""; $("#mailAddr").value = ""; showDocs(); }
+function resetDeal(){ clearTimeout(S.watchT); if ($("#qrPanel").classList.contains("big")){ $("#qrPanel").classList.remove("big"); document.body.style.overflow = ""; } S.sellerEmail = null; Object.values(AUTO).forEach(([q]) => { delete $(q).dataset.auto; $(q).classList.remove("autofill"); }); $("#autoHint").hidden = true; S.printName = ""; S.ocrBusy = false; S.kvOcr = null; S.phase = "vk"; views.forEach(v => { v.io.disconnect(); v.pdf.destroy(); }); views.clear(); S.orig=null; S.fields=[]; S.locked=false; S.dbLocked=false; S.dealId=null; S.final=null; S.maxStep=1; $("#viewer").innerHTML=""; $("#finalViewer").innerHTML=""; ["#mNr","#mKd","#mMail","#mFz"].forEach(q => $(q).value = ""); S.kv = null; S.atts = []; S.cv = null; S.cf = null; S.waiver = null; $("#cvIn").value = ""; $("#cfIn").value = ""; S.parts = null; S.kvData = null; S.autoSigs = null; $("#quickBox").hidden = true; S.sealed = null; S.finalHash = null; S.draftReady = false; S.actField = null; S.fresh = null; $("#pdfIn").value = ""; $("#attIn").value = ""; $("#mailAddr").value = ""; showDocs(); }
 $("#restart").addEventListener("click", () => { resetDeal(); go(1); });
 
 /* ---------- Anmeldung ---------- */
@@ -2457,6 +2578,43 @@ async function showDash(quiet){
   clearTimeout(dashTimer);
   dashTimer = setTimeout(() => { if (!$("#sD").hidden && !document.hidden) showDash(true); else if (!$("#sD").hidden) dashTimer = setTimeout(() => showDash(true), 5000); }, 30000);
 }
+/* Notfreigabe ohne CarVertical/Carfax (nur im Admin-Dashboard) */
+async function loadWaivers(){
+  const sel = $("#wvSeller"), cur = sel.value;
+  const [pr, wv] = await Promise.all([
+    sb.from("profiles").select("id,full_name,email").order("full_name"),
+    sb.from("report_waivers").select("id,seller_id,contract_no,reason,created_at,expires_at,revoked_at,used_at,used_contract_no,used_missing").order("created_at", { ascending:false }).limit(15)]);
+  if (pr.error || wv.error){ const m = $("#wvMsg"); m.className = "toast err"; m.textContent = "Freigaben konnten nicht geladen werden: " + (pr.error || wv.error).message; m.hidden = false; return; }
+  const nm = Object.fromEntries(pr.data.map(x => [x.id, x.full_name || x.email]));
+  sel.innerHTML = "";
+  pr.data.forEach(x => { const o = document.createElement("option"); o.value = x.id; o.textContent = (x.full_name || x.email) + (x.full_name ? " · " + x.email : ""); sel.appendChild(o); });
+  if (cur) sel.value = cur;
+  const ul = $("#wvList"); ul.innerHTML = "";
+  wv.data.forEach(w => {
+    const li = document.createElement("li"), sp = document.createElement("span");
+    const st = w.used_at ? "benutzt " + fmtDT(new Date(w.used_at)) + (w.used_contract_no ? " für " + w.used_contract_no : "") + (w.used_missing?.length ? " (fehlte: " + w.used_missing.join(", ") + ")" : "")
+      : w.revoked_at ? "zurückgezogen" : new Date(w.expires_at) < new Date() ? "abgelaufen, nicht benutzt" : "offen bis " + fmtDT(new Date(w.expires_at));
+    sp.textContent = (nm[w.seller_id] || "?") + (w.contract_no ? " · " + w.contract_no : "") + " · „" + w.reason + "“ · " + st;
+    li.appendChild(sp);
+    if (!w.used_at && !w.revoked_at && new Date(w.expires_at) > new Date()){
+      const x = document.createElement("button"); x.className = "btn small"; x.textContent = "Zurückziehen";
+      x.addEventListener("click", async () => { x.disabled = true; const r = await sb.from("report_waivers").update({ revoked_at:new Date().toISOString() }).eq("id", w.id); if (r.error) alert("Hat nicht geklappt: " + r.error.message); loadWaivers(); });
+      li.appendChild(x);
+    }
+    ul.appendChild(li);
+  });
+}
+$("#wvBox").addEventListener("toggle", () => { if ($("#wvBox").open) loadWaivers(); });
+$("#wvGo").addEventListener("click", async () => {
+  const m = $("#wvMsg"), why = $("#wvReason").value.trim(), b = $("#wvGo");
+  if (!why){ m.className = "toast err"; m.textContent = "Bitte einen Grund eintragen."; m.hidden = false; $("#wvReason").focus(); return; }
+  b.disabled = true;
+  const { error } = await sb.from("report_waivers").insert({ seller_id:$("#wvSeller").value, created_by:me.id, contract_no:$("#wvNr").value.trim() || null, reason:why });
+  b.disabled = false;
+  if (error){ m.className = "toast err"; m.textContent = "Freigabe hat nicht geklappt: " + error.message; m.hidden = false; return; }
+  m.className = "toast ok"; m.textContent = "Freigegeben. " + $("#wvSeller").selectedOptions[0].textContent.split(" · ")[0] + " kann jetzt einen Vertrag ohne die Berichte erstellen (24 Stunden lang)."; m.hidden = false;
+  $("#wvReason").value = ""; $("#wvNr").value = ""; loadWaivers();
+});
 $("#navDash").addEventListener("click", () => {
   if (S.locked && !S.final && !confirm("Der aktuelle Vorgang ist noch nicht abgeschlossen. Trotzdem zum Dashboard?")) return;
   showDash();
@@ -2473,7 +2631,7 @@ if (REMOTE) startRemote(); else showAuth();
 
 <button class="net" id="netBadge" hidden></button>
 <div class="jump-note" id="jumpNote" hidden role="status"></div>
-<div class="drop-zone" id="dropZone" hidden><div><b>PDFs hier loslassen</b><span>Kaufvertrag und Anlagen auf einmal. Kunde, Fahrzeug, Vorgangsnummer und Felder werden automatisch erkannt.</span></div></div>
+<div class="drop-zone" id="dropZone" hidden><div><b>PDFs hier loslassen</b><span>Kaufvertrag, CarVertical- und Carfax-Bericht auf einmal. Was welches Dokument ist, wird automatisch erkannt, ebenso Kunde, Fahrzeug, Vorgangsnummer und Felder.</span></div></div>
 <div class="prog" id="prog" hidden><div class="prog-bar"><i id="progFill"></i></div><span id="progTx"></span><button class="btn small primary" id="progGo"></button></div>
 <div class="check-dlg" id="checkDlg" hidden role="dialog" aria-modal="true" aria-labelledby="checkTitle"><div class="check-in"><h2 id="checkTitle">Bitte kurz prüfen</h2><ul id="checkList"></ul><div class="check-acts"><button class="btn" id="checkGo">Trotzdem weiter</button><button class="btn primary" id="checkFix">Korrigieren</button></div></div></div>
 </body>
