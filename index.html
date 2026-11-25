@@ -2032,9 +2032,9 @@ async function showArchive(){
   document.querySelector(".steps").hidden = true; $("#sA").hidden = false; $("#navArch").setAttribute("aria-current","page"); animate($("#sA")); $("#navHome").hidden = false;
   $("#archLede").textContent = me.role==="admin" ? "Alle Vorgänge aller Verkäufer." : "Deine Vorgänge.";
   const list = $("#archList"); list.innerHTML = '<p class="empty">Wird geladen …</p>';
-  const { data, error } = await sb.from("deals").select("id,contract_no,vehicle,customer_name,customer_email,status,created_at,updated_at,signed_at,locked_at,final_path,sealed_path,original_path,draft,fields,mail_status,mail_to,mail_status_at,downloaded_at,profiles(full_name,email)").order("created_at", { ascending:false }).limit(500);
+  const { data, error } = await sb.from("deals").select("id,contract_no,vehicle,customer_name,customer_email,status,created_at,updated_at,signed_at,locked_at,final_path,sealed_path,original_path,dready:draft_ready,dsaved:draft_saved_at,fields,mail_status,mail_to,mail_status_at,downloaded_at,profiles(full_name,email)").order("created_at", { ascending:false }).limit(500);
   if (error){ list.innerHTML = ""; const p = document.createElement("p"); p.className = "toast err"; p.textContent = "Archiv konnte nicht geladen werden: " + error.message; list.appendChild(p); return; }
-  archRows = data; renderArchive(); pushState().catch(() => {}); recheckMail();
+  archRows = data.map(liteDraft); renderArchive(); pushState().catch(() => {}); recheckMail();
   const mon = new Date(); mon.setDate(1); mon.setHours(0,0,0,0);
   const st = $("#archStats"); st.innerHTML = "";
   [[data.length, "Vorgänge gesamt"], [data.filter(r => r.signed_at && new Date(r.signed_at) >= mon).length, "Verkauft diesen Monat", true], [data.filter(isOpen).length, "Offen"]].forEach(([n, l, acc]) => {
@@ -2042,6 +2042,8 @@ async function showArchive(){
   });
   window.scrollTo({top:0, behavior:"instant"});
 }
+// Archiv und Dashboard laden nur die Eckdaten des Zwischenstands (der volle Stand mit allen Unterschriften ist groß); beim Fortsetzen wird er nachgeladen
+const liteDraft = r => { const { dready, dsaved, ...x } = r; x.draft = dsaved ? { ready:dready, saved_at:dsaved } : null; x._lite = true; return x; };
 const isOpen = r => !r.final_path && r.status !== "cancelled";
 function renderArchive(){
   const q = $("#archQ").value.trim().toLowerCase();
@@ -2182,6 +2184,7 @@ function metaFrom(r, d){
 }
 async function resumeDeal(r, toSign){
   try {
+    if (r._lite){ const f = await sb.from("deals").select("draft").eq("id", r.id).single(); if (f.error) throw f.error; r = { ...r, draft:f.data.draft }; }
     // Noch nicht hochgeladene Stände auf diesem Gerät haben Vorrang (z. B. Unterschriften bei schwachem WLAN)
     const pend = (await obAll().catch(() => [])).filter(x => x.deal === r.id);
     const bytes = await loadOriginal(r.original_path), d = pend.filter(x => x.op === "draft").at(-1)?.data.draft || r.draft || null;
@@ -2403,8 +2406,9 @@ async function showDash(quiet){
     document.querySelector(".steps").hidden = true; $("#sD").hidden = false; $("#navDash").setAttribute("aria-current","page"); animate($("#sD")); $("#navHome").hidden = false;
     window.scrollTo({top:0, behavior:"instant"});
   }
-  const { data, error } = await sb.from("deals").select("id,status,customer_name,vehicle,contract_no,created_at,updated_at,signed_at,seller_id,draft,locked_at,profiles(full_name,email)").order("created_at", { ascending:false }).limit(3000);
+  const { data, error } = await sb.from("deals").select("id,status,customer_name,vehicle,contract_no,created_at,updated_at,signed_at,seller_id,dready:draft_ready,dsaved:draft_saved_at,locked_at,profiles(full_name,email)").order("created_at", { ascending:false }).limit(3000);
   if (error){ $("#dashLede").textContent = "Daten konnten nicht geladen werden: " + error.message; return; }
+  data.forEach((r, i) => data[i] = liteDraft(r));
   const now = new Date(), day0 = new Date(now); day0.setHours(0,0,0,0);
   const wk0 = weekStart(now), mon0 = new Date(now.getFullYear(), now.getMonth(), 1), yr0 = new Date(now.getFullYear(), 0, 1);
   const sold = data.filter(r => r.signed_at).map(r => ({ ...r, at:new Date(r.signed_at) }));
