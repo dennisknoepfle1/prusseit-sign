@@ -443,6 +443,44 @@ body.customer .steps,body.customer .user{visibility:hidden}
 .hand .fld{width:100%;max-width:420px;text-align:left}
 .hand .fld .label{color:#A79FA2}
 .hand .fld input{width:100%;box-sizing:border-box;background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14);color:#fff;font-size:18px}
+.barbtn .bdg{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;margin-left:6px;border-radius:999px;background:var(--red);color:#fff;font-size:12px;font-weight:700;box-sizing:border-box}
+.barbtn[aria-current="page"] .bdg{background:#fff;color:var(--red)}
+.chk{margin-top:16px}
+.chk h3 .cnt{font-family:var(--f-display);background:var(--red);color:#fff;border-radius:999px;font-size:15px;min-width:26px;height:26px;display:inline-grid;place-items:center;padding:0 8px;margin-left:8px;vertical-align:middle}
+.chk h3 .cnt.zero{background:var(--ok-soft);color:var(--ok)}
+.chk-list{display:flex;flex-direction:column;gap:12px}
+.chk-card{border:1px solid var(--line);border-left:4px solid var(--red);border-radius:var(--r-sm);padding:14px 16px;display:flex;flex-direction:column;gap:10px;background:var(--surface);animation:rise .5s var(--ease-out) backwards}
+.chk-card.done{border-left-color:var(--line-2)}
+.chk-top{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.chk-top b{font-size:17px}
+.chk-top small{display:block;color:var(--muted);font-size:13px;margin-top:2px;overflow-wrap:anywhere}
+.chk-why{font-size:14px;color:var(--red-ink);font-weight:600}
+.chk-items{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.chk-items li{display:grid;grid-template-columns:72px minmax(0,1fr);gap:4px 10px;align-items:start}
+.chk-items .tag{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:3px 8px;border-radius:999px;white-space:nowrap;margin-top:1px;text-align:center}
+.tag.ok{background:var(--ok-soft);color:var(--ok)}.tag.zu_viel{background:var(--red);color:#fff}.tag.unklar{background:#FFF3D6;color:#8A5A00}
+.chk-items .wt{font-size:15px;overflow-wrap:anywhere}
+.chk-items .wy{grid-column:2;font-size:13px;color:var(--muted)}
+.chk-items .teach{grid-column:2;display:flex;gap:6px;flex-wrap:wrap}
+.chk-items .teach button{font:inherit;font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--line-2);background:transparent;color:var(--muted);cursor:pointer}
+.chk-items .teach button:hover{border-color:var(--ink);color:var(--ink)}
+.chk-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chk-acts input{flex:1 1 200px;min-width:0;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line-2);border-radius:var(--r-sm);background:var(--surface);color:var(--ink)}
+.chk-note{font-size:13px;color:var(--muted)}
+.chk-top small.chk-est{color:var(--ink);font-weight:600}
+.chk-items .wc{margin-left:8px;font-size:13px;font-weight:600;color:var(--muted);white-space:nowrap}
+.chk details{border-top:1px solid var(--line);padding-top:12px}
+.chk details details{border-top:0;padding-top:0}
+.chk summary{cursor:pointer;color:var(--muted);font-size:14px}
+.chk .rules{margin-top:12px;display:flex;flex-direction:column;gap:12px;font-size:14px}
+.chk .rules .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chk .rules input,.chk .rules select{font:inherit;font-size:14px;padding:7px 10px;border:1px solid var(--line-2);border-radius:var(--r-sm);background:var(--surface);color:var(--ink);min-width:0}
+.chk .rules input[type=checkbox]{width:auto;padding:0}
+.chk .rules ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.chk .rules li{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:7px 10px;border:1px solid var(--line);border-radius:var(--r-sm)}
+.chk .rules li span{min-width:0;overflow-wrap:anywhere}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .tag.unklar{background:#3A2E10;color:#F2C462}}
+:root[data-theme="dark"] .tag.unklar{background:#3A2E10;color:#F2C462}
 @media (max-width:900px){.dash-grid{grid-template-columns:minmax(0,1fr)}.dash-kpi{grid-template-columns:1fr 1fr}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style>
@@ -463,7 +501,7 @@ body.customer .steps,body.customer .user{visibility:hidden}
     </nav>
     <div class="user" id="userBar" hidden>
       <button class="barbtn" id="navHome" hidden>Start</button>
-      <button class="barbtn" id="navDash" hidden>Dashboard</button>
+      <button class="barbtn" id="navDash" hidden>Dashboard<span class="bdg" id="navChk" hidden></span></button>
       <button class="barbtn" id="navArch">Archiv</button>
       <span class="av-sm" id="userAv" aria-hidden="true"></span><span class="uname"><b id="userName"></b></span>
       <button class="barbtn" id="logout">Abmelden</button>
@@ -511,6 +549,25 @@ body.customer .steps,body.customer .user{visibility:hidden}
     <h1>Dashboard</h1>
     <p class="lede" id="dashLede">Verkäufe und offene Verträge aller Verkäufer.</p>
     <div class="stats dash-kpi" id="dashKpi"></div>
+    <div class="panel chk" id="chkBox">
+      <h3>Prüfung: Zusagen bei auszuführenden Arbeiten<span class="cnt" id="chkCnt"></span></h3>
+      <p class="hint" id="chkLede" style="margin:0">Jeder Kaufvertrag wird beim Anlegen gelesen. Verträge mit Zusagen, die zu viel, unbekannt oder zu teuer sind, landen hier. Kosten sind interne Schätzungen (Werkstattstunde 42 €, Teile zum EK).</p>
+      <div class="chk-list" id="chkList"></div>
+      <details id="chkDoneBox"><summary>Zuletzt geprüft</summary><div class="chk-list" id="chkDone" style="margin-top:12px"></div></details>
+      <details id="chkRulesBox"><summary>Regeln und Grenzen anpassen</summary>
+        <div class="rules">
+          <div class="row"><label>Prüfung ab geschätzt mehr als <input id="chkCost" type="number" min="0" step="10" style="width:90px"> € internen Kosten je Vertrag</label></div>
+          <div class="row"><label>Prüfung bei mehr als <input id="chkMax" type="number" min="1" max="40" style="width:70px"> Zusagen in einem Vertrag</label></div>
+          <div class="row"><label><input id="chkUnk" type="checkbox"> Unbekannte Arbeiten immer zur Prüfung</label><button class="btn small" id="chkCfgGo">Speichern</button></div>
+          <p class="hint" style="margin:0">Eigene Regeln gehen vor die Grundregeln. Ein Stichwort genügt, z. B. „Navi-Update“ als normal.</p>
+          <div class="row"><input id="chkKw" placeholder="Stichwort, z. B. Navi-Update" style="flex:1 1 180px"><select id="chkV"><option value="ok">normal</option><option value="zu_viel">zu viel</option></select><input id="chkCs" type="number" min="0" placeholder="interne Kosten €" style="width:150px"><input id="chkWhy" placeholder="Begründung (optional)" style="flex:2 1 220px"><button class="btn small primary" id="chkAdd">Regel hinzufügen</button></div>
+          <ul id="chkOwn"></ul>
+          <details><summary>Grundregeln ansehen</summary><ul id="chkBase" style="margin-top:10px"></ul></details>
+          <div class="row"><button class="btn small" id="chkOld">Ältere Verträge auswerten</button><span class="hint" id="chkOldMsg"></span></div>
+          <p class="toast" id="chkMsg" hidden></p>
+        </div>
+      </details>
+    </div>
     <div class="dash-grid">
       <div class="panel"><h3>Verkäufe pro Woche</h3><div class="bars" id="dashBars"></div></div>
       <div class="panel"><h3 id="rankHead">Verkäufer diesen Monat</h3><ol class="rank" id="dashRank"></ol></div>
@@ -952,6 +1009,47 @@ async function readKvData(bytes){
     return out;
   } finally { pdf.destroy(); }
 }
+/* Auszuführende Arbeiten aus dem Kaufvertrag lesen: Abschnitt „Auszuführende Arbeiten:“ bis Ort/Datum oder Unterschrift.
+   Spiegelstriche sind einzelne Punkte, Folgezeilen gehören zum Punkt davor. null = Abschnitt nicht gefunden.
+   src: PDF-Bytes oder { url } (dann lädt pdf.js nur die nötigen Teile, z. B. beim Auswerten älterer Verträge) */
+async function readWorks(src){
+  const pdf = await pdfjsLib.getDocument(src instanceof Uint8Array ? { data: src.slice() } : { ...src, disableAutoFetch:true, disableStream:true }).promise;
+  const clean = a => a.map(x => x.replace(/\s+/g, " ").trim()).filter(x => x && !/^(-|–|\/|keine|entfällt)$/i.test(x)).slice(0, 40);
+  const stop = s => /^_{4,}|unterschrift|^[A-ZÄÖÜ][\wäöüß .\-]*,\s*(den\s*)?\d{1,2}\.\d{1,2}\.\d{2,4}|^seite\s+\d+\s+von\s+\d+/i.test(s)
+    || /^(Hinweise|Abrechnung|Zahlungsweise|Sonstige Vereinbarungen|Vereinbarungen)\s*:/i.test(s);
+  try {
+    let items = null;
+    for (let i = 1; i <= Math.min(pdf.numPages, 6); i++){
+      const page = await pdf.getPage(i), [x0, y0, , y1] = page.view, H = y1 - y0;
+      const parts = (await page.getTextContent()).items.filter(it => it.str && it.str.trim())
+        .map(it => ({ s:it.str, x:it.transform[4]-x0, y:it.transform[5]-y0, w:it.width })).sort((a,b) => b.y - a.y || a.x - b.x);
+      const lines = [];
+      for (const p of parts){ const l = lines.find(l => Math.abs(l.y - p.y) < 2.5); if (l) l.p.push(p); else lines.push({ y:p.y, p:[p] }); }
+      lines.sort((a,b) => b.y - a.y);
+      for (const l of lines){
+        l.p.sort((a,b) => a.x - b.x);
+        const s = l.p.reduce((t, p, k) => t + (k && p.x - (l.p[k-1].x + l.p[k-1].w) > 1.5 && !/\s$/.test(t) ? " " : "") + p.s, "").replace(/\s+/g, " ").trim();
+        if (!items){
+          const m = s.match(/^Auszuf(ü|ue)hrende\s+Arbeiten\s*:?\s*(.*)$/i);
+          if (m){ items = []; if (m[2]) items.push(m[2]); }
+          continue;
+        }
+        if (l.y < H*0.11 || (i > 1 && l.y > H*0.93 && !items.length)) continue; // Fußzeile / Kopf der Folgeseite
+        if (stop(s)) return clean(items);
+        const b = s.match(/^[-–•*·]\s*(.*)$/);
+        if (b) items.push(b[1]); else if (items.length) items[items.length-1] += " " + s; else items.push(s);
+      }
+    }
+    return items && clean(items);
+  } finally { pdf.destroy(); }
+}
+/* Gefundene Arbeiten melden. Bewertet wird in der Datenbank, Verkäufer sehen davon nichts; Fehler hier halten nie den Vertrag auf. */
+function reportWorks(deal, bytes){
+  if (!deal) return;
+  readWorks(bytes).then(items => sb.rpc("set_deal_works", { p_deal:deal, p_items:items }))
+    .then(r => { if (r?.error) console.warn("Arbeiten melden", r.error); })
+    .catch(e => console.warn("Arbeiten lesen", e));
+}
 const AUTO = { vorgang:["#mNr","Vorgangs-Nr."], kunde:["#mKd","Kunde"], mail:["#mMail","E-Mail"], fahrzeug:["#mFz","Fahrzeug"] };
 function applyKvData(d){
   S.kvData = d; // für die Prüfung vor dem Senden
@@ -1034,6 +1132,7 @@ async function loadDoc(bytes, fields, name, opt={}){
   S.dealId = null;
   try { await createDeal(bytes); }
   catch(e) { console.error(e); err.textContent = "Vorgang konnte nicht im Archiv angelegt werden: " + (e.message||e) + ". Bitte Internetverbindung prüfen."; err.hidden = false; S.orig = null; return; }
+  reportWorks(S.dealId, opt.kvBytes || bytes);
   $("#origHash").textContent = S.origHash.toUpperCase().match(/.{1,8}/g).join(" ");
   S.draftReady = false; persistDraft().catch(e => console.warn(e));
   go(2);
@@ -2137,6 +2236,7 @@ async function onSession(session){
   $("#userName").textContent = me.full_name || me.email; $("#userAv").textContent = initials(me.full_name || me.email); $("#userBar").hidden = false;
   $("#mVk").value = me.full_name || me.email;
   $("#navDash").hidden = me.role !== "admin";
+  if (me.role === "admin") chkBadge();
   resetDeal(); go(1);
   OB.wait = 2000; flush();
   pushState().catch(() => {}); watchReady();
@@ -2574,6 +2674,7 @@ async function showDash(quiet){
     const pill = document.createElement("span"); pill.className = "pill" + (r.status==="remote_signed" ? " go" : r.status==="draft" ? " mute" : ""); pill.textContent = r.status==="draft" && !r.draft ? "wird vorbereitet" : STATUS[r.status] || r.status;
     row.append(av, a, s, pill, document.createElement("span")); ob.appendChild(row);
   });
+  loadChecks().catch(e => console.warn("Prüfung", e));
   $("#dashLede").textContent = sold.length + " Verkäufe insgesamt · aktualisiert " + new Intl.DateTimeFormat("de-DE", { timeStyle:"short", timeZone:TZ }).format(now) + " Uhr";
   clearTimeout(dashTimer);
   dashTimer = setTimeout(() => { if (!$("#sD").hidden && !document.hidden) showDash(true); else if (!$("#sD").hidden) dashTimer = setTimeout(() => showDash(true), 5000); }, 30000);
@@ -2614,6 +2715,173 @@ $("#wvGo").addEventListener("click", async () => {
   if (error){ m.className = "toast err"; m.textContent = "Freigabe hat nicht geklappt: " + error.message; m.hidden = false; return; }
   m.className = "toast ok"; m.textContent = "Freigegeben. " + $("#wvSeller").selectedOptions[0].textContent.split(" · ")[0] + " kann jetzt einen Vertrag ohne die Berichte erstellen (24 Stunden lang)."; m.hidden = false;
   $("#wvReason").value = ""; $("#wvNr").value = ""; loadWaivers();
+});
+/* ---------- Prüfung: Zusagen bei auszuführenden Arbeiten (nur Admins) ---------- */
+const VERD = { ok:"normal", zu_viel:"zu viel", unklar:"unklar" };
+const reEsc = t => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const chkNotes = {};
+const eur = n => new Intl.NumberFormat("de-DE", { maximumFractionDigits:0 }).format(n || 0) + " €";
+const chkMsg = (t, ok) => { const m = $("#chkMsg"); m.className = "toast " + (ok ? "ok" : "err"); m.textContent = t; m.hidden = !t; };
+async function chkBadge(){
+  const { data, error } = await sb.from("deal_works").select("deal_id,deals(status)").eq("review", "offen").limit(1000);
+  if (error) return 0;
+  const n = data.filter(w => w.deals && w.deals.status !== "cancelled").length, b = $("#navChk");
+  b.hidden = !n; b.textContent = n; $("#navDash").title = n ? n + (n === 1 ? " Vertrag wartet" : " Verträge warten") + " auf deine Prüfung" : "";
+  return n;
+}
+async function loadChecks(force){
+  if (!force && document.activeElement?.closest?.("#chkList")) return; // nicht neu zeichnen, während getippt wird
+  const { data, error } = await sb.from("deal_works")
+    .select("deal_id,items,rated,est_cost,flag_reasons,review,review_note,reviewed_at,updated_at,reviewer:profiles!deal_works_reviewed_by_fkey(full_name,email),deals(id,customer_name,contract_no,vehicle,status,created_at,signed_at,final_path,sealed_path,original_path,profiles(full_name,email))")
+    .not("review", "is", null).order("updated_at", { ascending:false }).limit(300);
+  const list = $("#chkList"), done = $("#chkDone");
+  if (error){ list.innerHTML = ""; const p = document.createElement("p"); p.className = "empty"; p.textContent = "Prüfliste konnte nicht geladen werden: " + error.message; list.appendChild(p); return; }
+  const rows = data.filter(w => w.deals && w.deals.status !== "cancelled");
+  const open = rows.filter(w => w.review === "offen").sort((a,b) => new Date(b.deals.created_at) - new Date(a.deals.created_at));
+  const fin = rows.filter(w => w.review !== "offen").sort((a,b) => new Date(b.reviewed_at || 0) - new Date(a.reviewed_at || 0)).slice(0, 20);
+  const c = $("#chkCnt"); c.textContent = open.length; c.className = "cnt" + (open.length ? "" : " zero");
+  const b = $("#navChk"); b.hidden = !open.length; b.textContent = open.length;
+  list.innerHTML = ""; done.innerHTML = "";
+  if (!open.length){ const p = document.createElement("p"); p.className = "empty"; p.textContent = "Nichts zu prüfen. Alle Zusagen liegen im normalen Rahmen."; list.appendChild(p); }
+  open.forEach((w, i) => list.appendChild(chkCard(w, true, i)));
+  if (!fin.length){ const p = document.createElement("p"); p.className = "empty"; p.textContent = "Noch nichts geprüft."; done.appendChild(p); }
+  fin.forEach((w, i) => done.appendChild(chkCard(w, false, i)));
+}
+function chkCard(w, open, i){
+  const d = w.deals, card = document.createElement("div"); card.className = "chk-card" + (open ? "" : " done"); card.style.animationDelay = Math.min(i, 10) * 35 + "ms";
+  const top = document.createElement("div"); top.className = "chk-top";
+  const a = document.createElement("div"); const nm = document.createElement("b"); nm.textContent = d.customer_name;
+  const sm = document.createElement("small"); sm.textContent = [d.contract_no, d.vehicle, d.profiles?.full_name || d.profiles?.email, "angelegt " + fmtDT(new Date(d.created_at))].filter(Boolean).join(" · ");
+  const est = document.createElement("small"); est.className = "chk-est"; est.textContent = "Zusagen kosten uns geschätzt " + eur(w.est_cost) + " intern" + ((n => n ? ", dazu " + n + (n === 1 ? " Punkt" : " Punkte") + " ohne Schätzung" : "")((w.rated || []).filter(x => x.cost == null).length));
+  a.append(nm, sm, est);
+  const r = document.createElement("div"); r.className = "chk-acts";
+  const pill = document.createElement("span"); pill.className = "pill" + (d.signed_at ? " ok" : " go"); pill.textContent = d.signed_at ? "unterschrieben" : "noch nicht unterschrieben";
+  if (!d.signed_at) pill.title = "Du kannst noch eingreifen, bevor der Kunde unterschreibt.";
+  r.appendChild(pill);
+  const path = d.sealed_path || d.final_path || d.original_path;
+  if (path){ const x = document.createElement("button"); x.className = "btn small"; x.textContent = "PDF"; x.addEventListener("click", async () => {
+    const win = window.open("", "_blank"); const { data, error } = await sb.storage.from("contracts").createSignedUrl(path, 300);
+    if (error){ win?.close(); alert("PDF konnte nicht geöffnet werden: " + error.message); return; }
+    if (win) win.location = data.signedUrl; else location.href = data.signedUrl; }); r.appendChild(x); }
+  top.append(a, r); card.appendChild(top);
+  if (open && w.flag_reasons?.length){ const y = document.createElement("div"); y.className = "chk-why"; y.textContent = w.flag_reasons.join(" · "); card.appendChild(y); }
+  const ul = document.createElement("ul"); ul.className = "chk-items";
+  (w.rated || []).forEach(it => {
+    const li = document.createElement("li");
+    const tg = document.createElement("span"); tg.className = "tag " + it.v; tg.textContent = VERD[it.v] || it.v;
+    const tx = document.createElement("span"); tx.className = "wt"; tx.textContent = it.t;
+    if (it.cost != null){ const c = document.createElement("span"); c.className = "wc"; c.textContent = "≈ " + eur(it.cost); tx.appendChild(c); }
+    const rs = document.createElement("span"); rs.className = "wy"; rs.textContent = (it.v === "unklar" ? "" : it.label + ": ") + it.why;
+    li.append(tg, tx, rs);
+    if (open && it.v !== "ok"){
+      const t = document.createElement("span"); t.className = "teach";
+      const teach = (v, label) => { const x = document.createElement("button"); x.textContent = label; x.title = "Merken: genau diese Arbeit künftig als " + VERD[v] + " werten"; x.addEventListener("click", () => teachRule(it.t, v, x)); t.appendChild(x); };
+      teach("ok", it.v === "zu_viel" ? "Ist bei uns normal" : "Ist normal");
+      if (it.v === "unklar") teach("zu_viel", "Ist zu viel");
+      li.appendChild(t);
+    }
+    ul.appendChild(li);
+  });
+  card.appendChild(ul);
+  const acts = document.createElement("div"); acts.className = "chk-acts";
+  if (open){
+    const note = document.createElement("input"); note.placeholder = "Notiz (optional)"; note.value = chkNotes[w.deal_id] || "";
+    note.addEventListener("input", () => chkNotes[w.deal_id] = note.value);
+    const btn = (label, cls, review) => { const x = document.createElement("button"); x.className = "btn small " + cls; x.textContent = label; x.addEventListener("click", () => setReview(w.deal_id, review, note.value, x)); acts.appendChild(x); };
+    acts.appendChild(note); btn("Passt so", "primary", "ok"); btn("Zu viel: geklärt", "", "beanstandet");
+  } else {
+    const n = document.createElement("span"); n.className = "chk-note";
+    n.textContent = (w.review === "ok" ? "✓ Passt so" : "⚠ Zu viel, geklärt") + " · " + (w.reviewer?.full_name || w.reviewer?.email || "") + (w.reviewed_at ? " am " + fmtDT(new Date(w.reviewed_at)) : "") + (w.review_note ? " · „" + w.review_note + "“" : "");
+    acts.appendChild(n);
+    const x = document.createElement("button"); x.className = "btn small quiet"; x.textContent = "Wieder öffnen"; x.addEventListener("click", () => setReview(w.deal_id, "offen", null, x)); acts.appendChild(x);
+  }
+  card.appendChild(acts);
+  return card;
+}
+async function setReview(deal, review, note, btn){
+  btn.disabled = true;
+  const { error } = await sb.rpc("review_works", { p_deal:deal, p_review:review, p_note:note || null });
+  btn.disabled = false;
+  if (error){ alert("Hat nicht geklappt: " + error.message); return; }
+  delete chkNotes[deal]; await loadChecks(true);
+}
+async function rerate(){
+  const { data, error } = await sb.rpc("rerate_works");
+  if (error) throw error;
+  await loadChecks(true); if (!$("#chkRulesBox").open) return data; await loadRules(); return data;
+}
+async function teachRule(text, v, btn){
+  btn.disabled = true;
+  const { error } = await sb.from("work_rules").insert({ pattern:reEsc(text.toLowerCase().trim()), verdict:v, label:text.slice(0, 80), reason:"Von " + (me.full_name || me.email) + " als " + VERD[v] + " festgelegt.", created_by:me.id });
+  if (error){ btn.disabled = false; alert("Regel ließ sich nicht speichern: " + error.message); return; }
+  try { await rerate(); } catch(e){ alert("Neu bewerten hat nicht geklappt: " + (e.message || e)); }
+}
+async function loadRules(){
+  const [cfg, rules] = await Promise.all([sb.from("work_config").select("max_items,unknown_review,max_cost").maybeSingle(), sb.from("work_rules").select("id,verdict,label,reason,cost,pattern,builtin,sort,created_at").order("sort").order("created_at")]);
+  if (cfg.error || rules.error){ chkMsg("Regeln konnten nicht geladen werden: " + (cfg.error || rules.error).message); return; }
+  $("#chkMax").value = cfg.data?.max_items ?? 6; $("#chkCost").value = cfg.data?.max_cost ?? 450; $("#chkUnk").checked = cfg.data?.unknown_review ?? true;
+  const own = $("#chkOwn"), base = $("#chkBase"); own.innerHTML = ""; base.innerHTML = "";
+  const line = (ul, x, del) => {
+    const li = document.createElement("li"), sp = document.createElement("span");
+    const tg = document.createElement("span"); tg.className = "tag " + x.verdict; tg.textContent = VERD[x.verdict]; tg.style.cssText = "font-size:11px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:999px;margin-right:8px";
+    sp.append(tg, x.label + (x.cost != null ? " (≈ " + eur(x.cost) + ")" : "") + " · " + x.reason); li.appendChild(sp);
+    if (del){ const b = document.createElement("button"); b.className = "btn small quiet"; b.textContent = "Löschen"; b.addEventListener("click", async () => {
+      b.disabled = true; const r = await sb.from("work_rules").delete().eq("id", x.id);
+      if (r.error){ b.disabled = false; chkMsg("Löschen hat nicht geklappt: " + r.error.message); return; }
+      try { await rerate(); chkMsg("Regel gelöscht, alle Verträge neu bewertet.", true); } catch(e){ chkMsg("Neu bewerten hat nicht geklappt: " + (e.message || e)); } }); li.appendChild(b); }
+    ul.appendChild(li);
+  };
+  const mine = rules.data.filter(x => !x.builtin);
+  if (!mine.length){ const li = document.createElement("li"); li.className = "empty"; li.style.display = "block"; li.textContent = "Noch keine eigenen Regeln."; own.appendChild(li); }
+  mine.forEach(x => line(own, x, true));
+  rules.data.filter(x => x.builtin).forEach(x => line(base, x, false));
+}
+$("#chkRulesBox").addEventListener("toggle", () => { if ($("#chkRulesBox").open) loadRules(); });
+$("#chkCfgGo").addEventListener("click", async () => {
+  const n = Math.round(+$("#chkMax").value), mc = Math.round(+$("#chkCost").value);
+  if (!(n >= 1 && n <= 40)){ chkMsg("Bitte bei den Zusagen eine Zahl zwischen 1 und 40 eintragen."); return; }
+  if (!(mc >= 0)){ chkMsg("Bitte einen Betrag in Euro eintragen."); return; }
+  const { error } = await sb.from("work_config").update({ max_items:n, max_cost:mc, unknown_review:$("#chkUnk").checked }).eq("id", true);
+  if (error){ chkMsg("Speichern hat nicht geklappt: " + error.message); return; }
+  try { const r = await rerate(); chkMsg("Gespeichert. Alle Verträge neu bewertet, " + r.open + " zur Prüfung offen.", true); } catch(e){ chkMsg("Neu bewerten hat nicht geklappt: " + (e.message || e)); }
+});
+$("#chkAdd").addEventListener("click", async () => {
+  const kw = $("#chkKw").value.trim(), v = $("#chkV").value, cs = $("#chkCs").value.trim(), cost = cs === "" ? null : Math.round(+cs.replace(",", "."));
+  if (cost !== null && !(cost >= 0)){ chkMsg("Kosten bitte als Betrag in Euro eintragen oder leer lassen."); $("#chkCs").focus(); return; }
+  if (kw.length < 3){ chkMsg("Bitte ein Stichwort mit mindestens 3 Zeichen eintragen."); $("#chkKw").focus(); return; }
+  const { error } = await sb.from("work_rules").insert({ pattern:reEsc(kw.toLowerCase()), verdict:v, label:kw.slice(0, 80), cost, reason:$("#chkWhy").value.trim() || "Von " + (me.full_name || me.email) + " als " + VERD[v] + " festgelegt.", created_by:me.id });
+  if (error){ chkMsg("Regel ließ sich nicht speichern: " + error.message); return; }
+  $("#chkKw").value = ""; $("#chkWhy").value = ""; $("#chkCs").value = "";
+  try { const r = await rerate(); chkMsg("Regel gespeichert. Alle Verträge neu bewertet, " + r.open + " zur Prüfung offen.", true); } catch(e){ chkMsg("Neu bewerten hat nicht geklappt: " + (e.message || e)); }
+});
+/* Ältere Verträge nachträglich auswerten: lädt je Vertrag nur die ersten Seiten (zur Not das ganze PDF) */
+$("#chkOld").addEventListener("click", async () => {
+  const btn = $("#chkOld"), msg = $("#chkOldMsg"); btn.disabled = true; msg.textContent = "Suche Verträge ohne Auswertung …";
+  try {
+    const [d, w] = await Promise.all([sb.from("deals").select("id,original_path,status").not("original_path", "is", null).neq("status", "cancelled").limit(3000), sb.from("deal_works").select("deal_id").limit(5000)]);
+    if (d.error || w.error) throw d.error || w.error;
+    const have = new Set(w.data.map(x => x.deal_id)), todo = d.data.filter(x => !have.has(x.id));
+    if (!todo.length){ msg.textContent = "Alle Verträge sind schon ausgewertet."; return; }
+    let n = 0, flagged = 0, none = 0, fail = 0;
+    const one = async x => {
+      try {
+        let items;
+        const u = await sb.storage.from("contracts").createSignedUrl(x.original_path, 600);
+        if (u.error) throw u.error;
+        try { items = await readWorks({ url:u.data.signedUrl }); }
+        catch { const f = await sb.storage.from("contracts").download(x.original_path); if (f.error) throw f.error; items = await readWorks(new Uint8Array(await f.data.arrayBuffer())); }
+        const r = await sb.rpc("set_deal_works", { p_deal:x.id, p_items:items });
+        if (r.error) throw r.error;
+        if (items === null) none++; if (r.data?.flagged) flagged++;
+      } catch(e){ console.warn("Auswerten", x.id, e); fail++; }
+      n++; msg.textContent = n + " von " + todo.length + " ausgewertet …";
+    };
+    const queue = todo.slice();
+    await Promise.all([0, 1, 2].map(async () => { while (queue.length) await one(queue.shift()); }));
+    msg.textContent = todo.length + " Verträge ausgewertet: " + flagged + " zur Prüfung" + (none ? ", bei " + none + " stand kein Abschnitt „Auszuführende Arbeiten“ drin" : "") + (fail ? ", " + fail + " ließen sich nicht lesen" : "") + ".";
+    await loadChecks(true);
+  } catch(e){ msg.textContent = "Hat nicht geklappt: " + (e.message || e); }
+  finally { btn.disabled = false; }
 });
 $("#navDash").addEventListener("click", () => {
   if (S.locked && !S.final && !confirm("Der aktuelle Vorgang ist noch nicht abgeschlossen. Trotzdem zum Dashboard?")) return;
