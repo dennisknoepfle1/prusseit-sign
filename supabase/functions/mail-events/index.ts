@@ -2,6 +2,7 @@
 //  * Resend-Webhook (POST, ohne Login): { type: "email.delivered" | "email.bounced" | …, data: { email_id } }.
 //    Die Signatur (Svix) wird mit RESEND_WEBHOOK_SECRET geprüft; ohne gültige Signatur wird nichts geändert.
 //    Bei Abweisung oder Spam-Meldung Push an Verkäufer und Admins.
+//    Gehört die Mail-ID zu einer Bewertungsaufforderung (deals.review_mail_id), wird nur review_mail_status nachgeführt.
 //  * Aus der App (POST, mit Login): { deal_id } oder { all: true } fragt den Status bei Resend nach. Das klappt nur,
 //    wenn der API-Schlüssel Lesezugriff hat; ein reiner Sende-Schlüssel bekommt 401, dann bleibt alles, wie es ist.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
@@ -73,6 +74,16 @@ async function apply(deal: Deal, status: string, event: string) {
   return status;
 }
 
+// Zustellstatus der Bewertungsaufforderung (ohne Push, nur am Vorgang vermerken)
+async function applyReview(emailId: string, status: string) {
+  const { data: d } = await admin.from("deals").select("id,review_mail_status").eq("review_mail_id", emailId).maybeSingle();
+  if (!d) return null;
+  if (status === d.review_mail_status || (RANK[status] ?? 0) < (RANK[d.review_mail_status ?? ""] ?? -1)) return d.review_mail_status;
+  await admin.from("deals").update({ review_mail_status: status }).eq("id", d.id).eq("review_mail_id", emailId);
+  if (status !== "delivered") await admin.from("audit_events").insert({ deal_id: d.id, event: "review_mail_" + status, details: { mail_id: emailId } });
+  return status;
+}
+
 async function refresh(deal: Deal) {
   if (!deal.mail_id || !RESEND) return deal.mail_status;
   const r = await fetch(`https://api.resend.com/emails/${encodeURIComponent(deal.mail_id)}`, { headers: { Authorization: `Bearer ${RESEND}` } });
@@ -97,7 +108,10 @@ Deno.serve(async (req) => {
       const status = MAP[String(body?.type ?? "").replace(/^email\./, "")];
       if (!status || !body?.data?.email_id) return json({ ok: true, ignored: true });
       const { data: deal } = await admin.from("deals").select(COLS).eq("mail_id", String(body.data.email_id)).maybeSingle();
-      if (!deal) return json({ ok: true, ignored: true }); // z. B. Unterschriftslink oder ältere Mail
+      if (!deal) {
+        const r = await applyReview(String(body.data.email_id), status);
+        return json(r === null ? { ok: true, ignored: true } : { ok: true, review: true, status: r }); // sonst z. B. Unterschriftslink oder ältere Mail
+      }
       return json({ ok: true, status: await apply(deal as Deal, status, body.type) });
     }
 
