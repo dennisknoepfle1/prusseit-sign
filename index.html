@@ -581,6 +581,7 @@ body.customer .steps,body.customer .user{visibility:hidden}
       <div class="rules">
         <div class="row"><label><input id="rvOn" type="checkbox"> Bewertungsmails verschicken</label></div>
         <div class="row"><label>Versand <input id="rvDays" type="number" min="0" max="90" step="1" style="width:70px"> Tage nach der Unterschrift</label><button class="btn small" id="rvGo">Speichern</button></div>
+        <div class="row"><button class="btn small" id="rvOld" disabled>Bisherige Kunden einladen</button><span class="hint" id="rvOldMsg"></span></div>
         <div class="row"><button class="btn small" id="rvTest">Testmail an mich senden</button><span class="hint">Geht nur an deine eigene Adresse, kein Kunde bekommt etwas.</span></div>
         <p class="toast" id="rvMsg" hidden></p>
       </div>
@@ -2361,8 +2362,12 @@ function reviewLine(r){
   };
   if (r.review_skip){
     // Verkäufer sehen hier nichts; Admins können eine abgeschaltete Mail wieder einschalten
-    if (!admin || r.review_sent_at || Date.parse(r.created_at) < REVIEW_START) return null;
-    el.classList.add("mute"); txt.textContent = "⭐ Bewertungsmail abgeschaltet"; toggle("wieder einschalten", false); return el;
+    if (!admin || r.review_sent_at || !r.customer_email) return null;
+    el.classList.add("mute");
+    // Ältere Vorgänge (vor dem Start) wurden nie angeschrieben: Admin kann sie nachträglich einladen, die Mail geht beim nächsten täglichen Versand raus
+    if (Date.parse(r.created_at) < REVIEW_START){ txt.textContent = "⭐ Noch keine Bewertung angefragt"; toggle("jetzt einladen", false); }
+    else { txt.textContent = "⭐ Bewertungsmail abgeschaltet"; toggle("wieder einschalten", false); }
+    return el;
   }
   const st = r.review_mail_status, to = r.review_mail_to || r.customer_email || "";
   if (r.review_sent_at){
@@ -2931,7 +2936,37 @@ async function loadReviewBox(){
   const c = await loadReviewCfg(true);
   if (!c){ $("#rvBox").hidden = true; return; }
   $("#rvBox").hidden = false; $("#rvOn").checked = c.enabled; $("#rvDays").value = c.delay_days;
+  loadOldInvites().catch(e => console.warn("Einladungen", e));
 }
+/* Bisherige Kunden (Verträge vor dem Start der Bewertungsmail) nachträglich einladen:
+   review_skip wird zurückgenommen, der tägliche Versand (max. 40 pro Tag) schickt die Mails dann nach und nach. */
+let oldInvites = [];
+const oldInviteQuery = () => sb.from("deals").select("id").eq("review_skip", true).is("review_sent_at", null)
+  .in("status", ["signed","sealed","sent"]).not("customer_email", "is", null).not("signed_at", "is", null)
+  .lt("created_at", new Date(REVIEW_START).toISOString()).limit(2000);
+async function loadOldInvites(){
+  const { data, error } = await oldInviteQuery();
+  if (error) throw error;
+  oldInvites = data.map(d => d.id);
+  const b = $("#rvOld"), n = oldInvites.length;
+  b.disabled = !n; b.textContent = n ? "Alle " + n + " bisherigen Kunden einladen" : "Bisherige Kunden einladen";
+  $("#rvOldMsg").textContent = n ? "Oder einzeln im Archiv mit „jetzt einladen“. Es gehen höchstens 40 Mails pro Tag raus, jeweils gegen 10 Uhr." : "Alle bisherigen Kunden sind schon eingeladen.";
+}
+$("#rvOld").addEventListener("click", async () => {
+  const n = oldInvites.length; if (!n) return;
+  if (!confirm(n + " bisherige Kunden bekommen die Bewertungsmail mit dem 25-€-Tankgutschein. Sie geht ab morgen gegen 10 Uhr raus, höchstens 40 pro Tag. Wirklich alle einladen?")) return;
+  const b = $("#rvOld"); b.disabled = true; b.textContent = "Wird eingetragen …";
+  try {
+    for (let i = 0; i < n; i += 100){
+      const ids = oldInvites.slice(i, i + 100);
+      const { error } = await sb.from("deals").update({ review_skip:false }).in("id", ids);
+      if (error) throw error;
+      await sb.from("audit_events").insert(ids.map(id => ({ deal_id:id, event:"review_unskipped", details:{ by:me.email, bulk:true } })));
+    }
+    rvMsg(n + " Kunden eingeladen. Die Mails gehen ab dem nächsten Versand raus, höchstens 40 pro Tag. Den Stand siehst du im Archiv.", true);
+  } catch(e){ rvMsg("Einladen hat nicht geklappt: " + (e.message || e)); }
+  await loadOldInvites().catch(() => {});
+});
 $("#rvGo").addEventListener("click", async () => {
   const n = Math.round(+$("#rvDays").value);
   if (!(n >= 0 && n <= 90)){ rvMsg("Bitte eine Zahl zwischen 0 und 90 Tagen eintragen."); return; }
