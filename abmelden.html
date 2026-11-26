@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Abmelden · Autowelt Prusseit</title>
+<style>
+:root{--bg:#f4f3f3;--card:#fff;--ink:#18151a;--muted:#6a6265;--red:#E3001B;--ok:#1E7A4C}
+@media (prefers-color-scheme:dark){:root{--bg:#141213;--card:#1f1c1e;--ink:#f2eff0;--muted:#a9a1a4;--red:#FF2A40;--ok:#4DC48B}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Arial,Helvetica,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+header{width:100%;background:#0e0c0d;padding:18px 16px;display:flex;justify-content:center}
+header img{width:180px;height:auto;display:block}
+main{width:100%;max-width:480px;padding:24px 16px}
+.card{background:var(--card);border-radius:10px;padding:24px}
+h1{font-size:22px;margin:0 0 10px}
+p{margin:0 0 14px}
+button{font:inherit;font-weight:bold;background:var(--red);color:#fff;border:0;border-radius:6px;padding:12px 18px;cursor:pointer;width:100%}
+button:disabled{opacity:.6;cursor:default}
+.ok{color:var(--ok);font-weight:bold}
+.err{color:var(--red);font-weight:bold}
+small{color:var(--muted);display:block;margin-top:16px}
+</style>
+</head>
+<body>
+<header><img src="logo-white.webp" alt="Autowelt Prusseit" width="180" height="51"></header>
+<main><div class="card">
+  <h1>Keine Bewertungsmails mehr</h1>
+  <p id="txt">Möchtest du keine Mails mehr bekommen, in denen wir dich um eine Bewertung bitten? Dann bestätige kurz.</p>
+  <button id="go">Abmelden</button>
+  <p id="msg" hidden></p>
+  <small>Fragen? Schreib uns an willkommen@autowelt-prusseit.de.</small>
+</div></main>
+<script>
+const p = new URLSearchParams(location.search), go = document.getElementById("go"), msg = document.getElementById("msg");
+const show = (cls, t) => { msg.hidden = false; msg.className = cls; msg.textContent = t; };
+if (!p.get("unsub") || !p.get("sig")){ go.hidden = true; show("err", "Dieser Link ist unvollständig. Schreib uns einfach an willkommen@autowelt-prusseit.de, dann tragen wir dich aus."); }
+go.addEventListener("click", async () => {
+  go.disabled = true; go.textContent = "Einen Moment …";
+  try {
+    const r = await fetch("https://shhtnbarfnhuizhnqpac.supabase.co/functions/v1/send-review-request", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ unsub:p.get("unsub"), sig:p.get("sig") }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) throw new Error(j.error || "Fehler " + r.status);
+    go.hidden = true; document.getElementById("txt").hidden = true;
+    show("ok", "Erledigt. Du bekommst von uns keine Bewertungsmails mehr. Allzeit gute Fahrt!");
+  } catch(e){
+    go.disabled = false; go.textContent = "Abmelden";
+    show("err", "Das hat leider nicht geklappt (" + e.message + "). Schreib uns einfach an willkommen@autowelt-prusseit.de, dann tragen wir dich aus.");
+  }
+});
+</script>
+</body>
+</html>
