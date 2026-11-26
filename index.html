@@ -2513,6 +2513,35 @@ async function loadReady(){
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && me && (!$("#s1").hidden || !$("#s4").hidden)) loadReady(); if (!document.hidden && me) watchReady(); });
 
+/* ---------- Automatische Aktualisierung: neue App-Version wird geladen, sobald gerade kein Vorgang offen ist ---------- */
+const UPD = { base:null, pending:false };
+async function pageHash(){
+  const r = await fetch(location.pathname + "?v=" + Date.now(), { cache:"no-store" });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return sha256(new Uint8Array(await r.arrayBuffer()));
+}
+async function updIdle(){
+  if (REMOTE || S.orig || S.locked || handMode) return false;           // Vertrag geladen, Unterschrift läuft oder Dialog offen
+  const a = document.activeElement; if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return false; // jemand tippt gerade
+  if (OB.busy) return false;
+  try { if ((await obAll()).length) return false; } catch { return false; } // erst alles hochladen
+  return true;
+}
+async function updCheck(){
+  if (!navigator.onLine) return;
+  try {
+    const h = await pageHash();
+    if (!UPD.base){ UPD.base = h; return; }
+    if (h !== UPD.base) UPD.pending = true;
+  } catch { return; }
+  if (UPD.pending && await updIdle()){ await fetch(location.pathname, { cache:"reload" }).catch(() => {}); location.reload(); } // Browser-Zwischenspeicher erst auffrischen
+}
+if (!REMOTE){
+  updCheck();
+  setInterval(updCheck, 5 * 60000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden || UPD.pending) updCheck(); });
+}
+
 /* ---------- Mitteilung „Vertrag bereit“ angetippt: Vertrag direkt öffnen ---------- */
 async function openFromPush(id){
   if (!me || !/^[0-9a-f-]{36}$/i.test(id)) return;
