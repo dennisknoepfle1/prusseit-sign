@@ -41,3 +41,10 @@ Neue Spalten an `deals`:
 - Kundentexte der Bewertungsmail sind bewusst in Du-Form. Das ist abgestimmt mit Dennis, auch die Bitte um eine 5-Sterne-Bewertung im Namen des Verkäufers.
 - Testversand ohne Kundenkontakt: `send-review-request` mit `{ "test_to": "adresse", "deal_id": "…" }` als Admin aufrufen. Die Mail geht dann nur an `test_to`, und am Vorgang ändert sich nichts.
 - **Offen:** Die erste Testmail an dennis.knoepfle@prusseit-group.de landete im Junk-Ordner. Vor dem ersten echten Versand sollte die Zustellung an private Adressen (Gmail, GMX, web.de) geprüft werden. Bei Bedarf den Absender (`MAIL_FROM`) auf eine eigene, bei Resend verifizierte Domain umstellen.
+
+## Umgesetzt (26.11.2026)
+
+- Archiv: Zeile „⭐ …“ unter dem Mailstatus wie oben beschrieben. Zusätzlich rot „konnte nicht verschickt werden, nächster Versuch morgen“, wenn der Versand an Resend scheiterte (der Server versucht es am nächsten Tag erneut). Ist das Fälligkeitsdatum schon vorbei, steht „geht beim nächsten Versand raus“.
+- Admins: „nicht senden“ bzw. „wieder einschalten“ direkt in der Zeile, mit Eintrag im Prüfprotokoll (`review_skipped` / `review_unskipped`).
+- Dashboard: Kasten „Bewertungsmail an Kunden“ mit An/Aus, Wartezeit in Tagen und „Testmail an mich senden“.
+- Migration `0013_review_guard.sql`: `review_skip` dürfen nur Admins ändern, den Versandstand nur der Server.

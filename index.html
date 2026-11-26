@@ -179,6 +179,8 @@ p{margin:0}
 .arch-row .mailst{display:block;margin-top:2px;font-size:12.5px}
 .arch-row .mailst.ok{color:var(--ok)}
 .arch-row .mailst.bad{color:var(--red-ink);font-weight:600}
+.arch-row .mailst.mute{color:var(--muted)}
+.linkbtn{font:inherit;color:inherit;background:none;border:0;padding:0;text-decoration:underline;cursor:pointer}.linkbtn:disabled{opacity:.5;cursor:default}
 .panel.qr{align-items:center;text-align:center}
 .qr-box{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;cursor:zoom-in;line-height:0;width:200px;height:200px;display:grid;place-items:center;transition:transform .2s var(--ease)}
 .qr-box svg{width:100%;height:100%;display:block}
@@ -573,6 +575,16 @@ body.customer .steps,body.customer .user{visibility:hidden}
       <div class="panel"><h3 id="rankHead">Verkäufer diesen Monat</h3><ol class="rank" id="dashRank"></ol></div>
     </div>
     <div class="panel" style="margin-top:16px"><h3>Gerade offen<span class="live-dot" title="Aktualisiert sich automatisch"></span></h3><div class="arch" id="dashOpen"></div></div>
+    <div class="panel chk" id="rvBox">
+      <h3>Bewertungsmail an Kunden</h3>
+      <p class="hint" style="margin:0">Jeder Kunde bekommt einige Tage nach der Unterschrift automatisch eine Mail mit der Bitte um eine Bewertung (25 € Aral-Gutschein). Versand täglich gegen 10 Uhr. Einzelne Vorgänge schaltest du im Archiv mit „nicht senden“ ab.</p>
+      <div class="rules">
+        <div class="row"><label><input id="rvOn" type="checkbox"> Bewertungsmails verschicken</label></div>
+        <div class="row"><label>Versand <input id="rvDays" type="number" min="0" max="90" step="1" style="width:70px"> Tage nach der Unterschrift</label><button class="btn small" id="rvGo">Speichern</button></div>
+        <div class="row"><button class="btn small" id="rvTest">Testmail an mich senden</button><span class="hint">Geht nur an deine eigene Adresse, kein Kunde bekommt etwas.</span></div>
+        <p class="toast" id="rvMsg" hidden></p>
+      </div>
+    </div>
     <div class="waiver"><details id="wvBox"><summary>Notfreigabe ohne CarVertical/Carfax</summary>
       <div class="panel" style="margin-top:10px">
         <p class="lede" style="margin:0;font-size:15px">Gilt für genau einen Vertrag und 24 Stunden. Der Verkäufer sieht davon nichts, bis ihm ein Bericht fehlt: dann geht es mit dieser Freigabe einfach weiter. Alles wird im Prüfprotokoll des Vorgangs vermerkt.</p>
@@ -2253,7 +2265,8 @@ async function showArchive(){
   document.querySelector(".steps").hidden = true; $("#sA").hidden = false; $("#navArch").setAttribute("aria-current","page"); animate($("#sA")); $("#navHome").hidden = false;
   $("#archLede").textContent = me.role==="admin" ? "Alle Vorgänge aller Verkäufer." : "Deine Vorgänge.";
   const list = $("#archList"); list.innerHTML = '<p class="empty">Wird geladen …</p>';
-  const { data, error } = await sb.from("deals").select("id,contract_no,vehicle,customer_name,customer_email,status,created_at,updated_at,signed_at,locked_at,final_path,sealed_path,original_path,dready:draft_ready,dsaved:draft_saved_at,fields,mail_status,mail_to,mail_status_at,downloaded_at,profiles(full_name,email)").order("created_at", { ascending:false }).limit(500);
+  const { data, error } = await sb.from("deals").select("id,contract_no,vehicle,customer_name,customer_email,status,created_at,updated_at,signed_at,locked_at,final_path,sealed_path,original_path,dready:draft_ready,dsaved:draft_saved_at,fields,mail_status,mail_to,mail_status_at,downloaded_at,review_sent_at,review_mail_to,review_mail_status,review_skip,profiles(full_name,email)").order("created_at", { ascending:false }).limit(500);
+  await loadReviewCfg();
   if (error){ list.innerHTML = ""; const p = document.createElement("p"); p.className = "toast err"; p.textContent = "Archiv konnte nicht geladen werden: " + error.message; list.appendChild(p); return; }
   archRows = data.map(liteDraft); renderArchive(); pushState().catch(() => {}); recheckMail();
   const mon = new Date(); mon.setDate(1); mon.setHours(0,0,0,0);
@@ -2282,6 +2295,7 @@ function renderArchive(){
     const sm = document.createElement("small"); sm.textContent = [r.contract_no, r.vehicle, fmtDT(new Date(r.created_at))].filter(Boolean).join(" · ");
     a.append(b, sm);
     const ms = mailLine(r); if (ms) a.appendChild(ms);
+    const rv = reviewLine(r); if (rv) a.appendChild(rv);
     const s = document.createElement("small"); s.className = "seller"; s.textContent = r.profiles?.full_name || r.profiles?.email || "";
     const pill = document.createElement("span"); pill.className = "pill" + (r.final_path ? " ok" : r.status==="remote_signed" ? " go" : r.status==="cancelled" ? " mute" : "");
     const bad = r.final_path && ["bounced","failed","complained"].includes(r.mail_status);
@@ -2317,6 +2331,52 @@ function mailLine(r){
   const t = { delivered:["ok","✉ Zugestellt an " + to], delayed:["","✉ Zustellung verzögert: " + to], bounced:["bad","✉ Nicht zugestellt: " + to], failed:["bad","✉ Nicht zugestellt: " + to], complained:["bad","✉ Als Spam markiert: " + to], sent:["","✉ Verschickt an " + to + ", Zustellung offen"] }[r.mail_status]
     || (r.status === "sent" ? ["","✉ Verschickt an " + to] : ["bad","✉ Noch nicht verschickt"]);
   el.classList.add(...[t[0]].filter(Boolean)); el.textContent = t[1] + (r.downloaded_at ? " · PDF per QR-Code geladen" : "");
+  return el;
+}
+/* Bewertungsmail: geht review_config.delay_days nach der Unterschrift automatisch an den Kunden (Server, täglich 10:07 Uhr) */
+let reviewCfg = null;
+async function loadReviewCfg(force){
+  if (reviewCfg && !force) return reviewCfg;
+  const { data } = await sb.from("review_config").select("enabled,delay_days").maybeSingle();
+  return reviewCfg = data || reviewCfg;
+}
+const fmtD = d => new Intl.DateTimeFormat("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:TZ}).format(d);
+const REVIEW_START = Date.parse("2026-11-26T00:00:00+01:00"); // ältere Vorgänge bekommen nie eine Bewertungsmail
+function reviewLine(r){
+  if (r.status === "cancelled" || !r.signed_at) return null;
+  const admin = me.role === "admin";
+  const el = document.createElement("small"); el.className = "mailst";
+  const txt = document.createElement("span"); el.appendChild(txt);
+  const toggle = (label, skip) => {
+    if (!admin) return;
+    const x = document.createElement("button"); x.type = "button"; x.className = "linkbtn"; x.textContent = label;
+    x.addEventListener("click", async () => {
+      x.disabled = true;
+      const { error } = await sb.from("deals").update({ review_skip:skip }).eq("id", r.id);
+      if (error){ x.disabled = false; alert("Hat nicht geklappt: " + error.message); return; }
+      await sb.from("audit_events").insert({ deal_id:r.id, event: skip ? "review_skipped" : "review_unskipped", details:{ by:me.email } });
+      r.review_skip = skip; renderArchive();
+    });
+    el.append(" · ", x);
+  };
+  if (r.review_skip){
+    // Verkäufer sehen hier nichts; Admins können eine abgeschaltete Mail wieder einschalten
+    if (!admin || r.review_sent_at || Date.parse(r.created_at) < REVIEW_START) return null;
+    el.classList.add("mute"); txt.textContent = "⭐ Bewertungsmail abgeschaltet"; toggle("wieder einschalten", false); return el;
+  }
+  const st = r.review_mail_status, to = r.review_mail_to || r.customer_email || "";
+  if (r.review_sent_at){
+    if (["bounced","failed","complained"].includes(st)){ el.classList.add("bad"); txt.textContent = (st === "complained" ? "⭐ Bewertungsmail als Spam markiert: " : "⭐ Bewertungsmail nicht zugestellt: ") + to; }
+    else { if (st === "delivered") el.classList.add("ok"); txt.textContent = "⭐ Bewertung angefragt am " + fmtD(new Date(r.review_sent_at)) + (st === "delivered" ? " · zugestellt" : ""); }
+    return el;
+  }
+  if (!r.customer_email) return null;
+  if (st === "failed"){ el.classList.add("bad"); txt.textContent = "⭐ Bewertungsmail konnte nicht verschickt werden, nächster Versuch morgen"; toggle("nicht senden", true); return el; }
+  const cfg = reviewCfg || { enabled:true, delay_days:10 };
+  if (!cfg.enabled){ if (!admin) return null; el.classList.add("mute"); txt.textContent = "⭐ Bewertungsmails sind gerade ausgeschaltet"; return el; }
+  const due = new Date(Date.parse(r.signed_at) + cfg.delay_days * 86400000);
+  txt.textContent = due > new Date() ? "⭐ Bewertungsmail geht am " + fmtD(due) + " raus" : "⭐ Bewertungsmail geht beim nächsten Versand raus";
+  toggle("nicht senden", true);
   return el;
 }
 // Hängt eine Zustellung (Webhook verloren oder noch nicht eingerichtet), fragt der Server bei Resend nach. Einmal pro Sitzung.
@@ -2675,6 +2735,7 @@ async function showDash(quiet){
     row.append(av, a, s, pill, document.createElement("span")); ob.appendChild(row);
   });
   loadChecks().catch(e => console.warn("Prüfung", e));
+  loadReviewBox().catch(e => console.warn("Bewertungsmail", e));
   $("#dashLede").textContent = sold.length + " Verkäufe insgesamt · aktualisiert " + new Intl.DateTimeFormat("de-DE", { timeStyle:"short", timeZone:TZ }).format(now) + " Uhr";
   clearTimeout(dashTimer);
   dashTimer = setTimeout(() => { if (!$("#sD").hidden && !document.hidden) showDash(true); else if (!$("#sD").hidden) dashTimer = setTimeout(() => showDash(true), 5000); }, 30000);
@@ -2836,6 +2897,26 @@ async function loadRules(){
   mine.forEach(x => line(own, x, true));
   rules.data.filter(x => x.builtin).forEach(x => line(base, x, false));
 }
+function rvMsg(t, ok){ const m = $("#rvMsg"); m.hidden = false; m.className = "toast" + (ok ? " ok" : " err"); m.textContent = t; }
+async function loadReviewBox(){
+  const c = await loadReviewCfg(true);
+  if (!c){ $("#rvBox").hidden = true; return; }
+  $("#rvBox").hidden = false; $("#rvOn").checked = c.enabled; $("#rvDays").value = c.delay_days;
+}
+$("#rvGo").addEventListener("click", async () => {
+  const n = Math.round(+$("#rvDays").value);
+  if (!(n >= 0 && n <= 90)){ rvMsg("Bitte eine Zahl zwischen 0 und 90 Tagen eintragen."); return; }
+  const { error } = await sb.from("review_config").update({ enabled:$("#rvOn").checked, delay_days:n }).eq("id", true);
+  if (error){ rvMsg("Speichern hat nicht geklappt: " + error.message); return; }
+  await loadReviewCfg(true);
+  rvMsg($("#rvOn").checked ? "Gespeichert. Bewertungsmails gehen " + n + " Tage nach der Unterschrift raus." : "Gespeichert. Es gehen keine Bewertungsmails mehr raus.", true);
+});
+$("#rvTest").addEventListener("click", async () => {
+  const b = $("#rvTest"); b.disabled = true;
+  try { await fnCall("send-review-request", { test_to:me.email, customer_name:me.full_name || "Max Mustermann" }); rvMsg("Testmail ist an " + me.email + " unterwegs. Schau auch im Spam-Ordner nach.", true); }
+  catch(e){ rvMsg("Testmail hat nicht geklappt: " + (e.message || e)); }
+  finally { b.disabled = false; }
+});
 $("#chkRulesBox").addEventListener("toggle", () => { if ($("#chkRulesBox").open) loadRules(); });
 $("#chkCfgGo").addEventListener("click", async () => {
   const n = Math.round(+$("#chkMax").value), mc = Math.round(+$("#chkCost").value);
