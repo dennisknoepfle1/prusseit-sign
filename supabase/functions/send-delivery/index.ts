@@ -44,11 +44,13 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     let to = me.email, nr = "", kunde = "", fahrzeug = "", certB64 = "", listB64 = "", deal: string | null = null, test = false;
+    const scans: Record<string, string> = {};
 
     if (body.test) {
       test = true;
       certB64 = String(body.cert ?? ""); listB64 = String(body.list ?? "");
-      if (!certB64 || !listB64 || certB64.length + listB64.length > 12_000_000) return json({ error: "Dokumente fehlen" }, 400);
+      for (const k of ["brief", "schein"]) if (body[k]) scans[k] = String(body[k]);
+      if (!certB64 || !listB64 || certB64.length + listB64.length + Object.values(scans).join("").length > 30_000_000) return json({ error: "Dokumente fehlen" }, 400);
       nr = String(body.vorgang ?? "TEST"); kunde = String(body.kunde ?? "Testkunde"); fahrzeug = String(body.fahrzeug ?? "");
     } else {
       const { data: v } = await admin.from("deliveries").select("id,deal_id,created_by,status,cert_path,list_path,data").eq("id", body.delivery_id).single();
@@ -60,6 +62,11 @@ Deno.serve(async (req) => {
       if (c.error || l.error) throw c.error ?? l.error;
       certB64 = b64(new Uint8Array(await c.data!.arrayBuffer())); listB64 = b64(new Uint8Array(await l.data!.arrayBuffer()));
       const d = v.data ?? {};
+      for (const [k, p] of Object.entries(d.scans ?? {})) {
+        if (typeof p !== "string" || !p.startsWith(`${v.deal_id}/auslieferung/${v.id}`)) continue;
+        const f = await admin.storage.from("contracts").download(p);
+        if (!f.error) scans[k] = b64(new Uint8Array(await f.data!.arrayBuffer()));
+      }
       nr = d.vorgang ?? ""; kunde = d.kunde?.name ?? ""; fahrzeug = [d.fz?.hersteller, d.fz?.modell].filter(Boolean).join(" ");
       deal = v.deal_id;
     }
@@ -68,13 +75,14 @@ Deno.serve(async (req) => {
     const subject = (test ? "TEST · " : "") + `Auslieferung ${nr} · ${kunde}${fahrzeug ? " · " + fahrzeug : ""}`.trim();
     const html = shell(`<p style="margin:0 0 12px">Hallo ${esc(me.full_name?.split(" ")[0] || "")},</p>
 <p style="margin:0 0 12px">${test ? "<b>Das ist eine Testauslieferung.</b> " : ""}anbei die Unterlagen zur Auslieferung <b>${esc(nr)}</b> an <b>${esc(kunde)}</b>${fahrzeug ? " (" + esc(fahrzeug) + ")" : ""}:</p>
-<ul style="margin:0 0 12px;padding-left:20px"><li>CarGarantie-Übergabezertifikat</li><li>Auslieferungscheckliste</li></ul>
-<p style="margin:0;color:#6a6265;font-size:13px">Beide Dokumente liegen zusätzlich in Prusseit Sign beim Vorgang.</p>`);
+<ul style="margin:0 0 12px;padding-left:20px"><li>CarGarantie-Übergabezertifikat</li><li>Auslieferungscheckliste</li>${scans.brief ? "<li>Scan Brief (Zulassungsbescheinigung Teil II)</li>" : ""}${scans.schein ? "<li>Scan Fahrzeugschein</li>" : ""}</ul>
+<p style="margin:0;color:#6a6265;font-size:13px">Alle Dokumente liegen zusätzlich in Prusseit Sign beim Vorgang.</p>`);
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
       body: JSON.stringify({ from: FROM, to: [to], subject, html,
-        attachments: [{ filename: `Uebergabezertifikat_${tag}.pdf`, content: certB64 }, { filename: `Auslieferungscheckliste_${tag}.pdf`, content: listB64 }] }),
+        attachments: [{ filename: `Uebergabezertifikat_${tag}.pdf`, content: certB64 }, { filename: `Auslieferungscheckliste_${tag}.pdf`, content: listB64 },
+          ...(scans.brief ? [{ filename: `Brief_${tag}.pdf`, content: scans.brief }] : []), ...(scans.schein ? [{ filename: `Fahrzeugschein_${tag}.pdf`, content: scans.schein }] : [])] }),
     });
     const res = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(`Resend ${r.status}: ${res?.message ?? JSON.stringify(res)}`);

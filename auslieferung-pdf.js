@@ -67,7 +67,7 @@
     ]],
   ];
   const PAY = [["ueberweisung", "Überweisung"], ["finanzierung", "Finanzierung"]];
-  const ZUL = [["online", "Online über uns zugelassen"], ["brief", "Kunde bringt Brief mit"]];
+  const ZUL = [["online", "Online über uns zugelassen"], ["brief", "Kunde hat selbst zugelassen (Brief)"]];
   /* Punkt „brief“ gibt es nur, wenn der Kunde den Brief mitbringt */
   const itemsFor = d => LIST.map(([g, its]) => [g, its.filter(([k]) => k !== "brief" || d.zulassung === "brief")]);
 
@@ -188,7 +188,7 @@
     };
     const mid = L + (Rt - L) / 2 + 8;
     const y1 = box(L, mid - L - 16, "Fahrzeug", [
-      ["Fahrzeug", [fz.hersteller, fz.modell].filter(Boolean).join(" ")], ["FIN", fz.fin], ["Zulassung", (ZUL.find(([k]) => k === d.zulassung) || [, ""])[1]],
+      ["Fahrzeug", [fz.hersteller, fz.modell].filter(Boolean).join(" ")], ["FIN", fz.fin], ["Zulassung", [(ZUL.find(([k]) => k === d.zulassung) || [, ""])[1], (d.scanInfo || []).join(", ")].filter(Boolean).join(" · ")],
       ["Erstzulassung", fz.ez], ["km bei Auslief.", d.kmAus ? d.kmAus + " km" : ""]]);
     const y2 = box(mid, Rt - mid, "Käufer", [
       ["Name", kd.name], ["Anschrift", [kd.strasse, kd.ort].filter(Boolean).join(", ")], ["Telefon", kd.tel],
