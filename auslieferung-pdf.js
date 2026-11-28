@@ -74,6 +74,7 @@
   const fmtDate = d => new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Berlin" }).format(d);
   const fmtTime = d => new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" }).format(d);
 
+  const BEM_DEFAULT = "Allgemeine Gebrauchsspuren, dem Alter und der Laufleistung entsprechend.";
   function fitText(font, s, size, max) {
     s = W1252(s);
     while (size > 5.5 && font.widthOfTextAtSize(s, size) > max) size -= 0.25;
@@ -135,7 +136,15 @@
       const ja = ok ? good : !good;
       cross(ja ? JA_X : NEIN_X, top);
     }
-    txt(d.bemerkungen, 317, 707, 225);
+    // Sonstige Bemerkungen: zwei Linien, Standardtext (Dennis 2026-11-28)
+    {
+      // Zeile 1 rechts neben dem Label, Zeile 2 über die volle Breite
+      const slots = [[401, 702.5, 143], [318, 717.5, 228]], size = 8.5;
+      const words = W1252(d.bemerkungen ?? BEM_DEFAULT).split(/\s+/).filter(Boolean), lines = [""];
+      for (const w of words) { const i = lines.length - 1, t = (lines[i] + " " + w).trim();
+        if (i === slots.length - 1 || f.widthOfTextAtSize(t, size) <= slots[i][2] || !lines[i]) lines[i] = t; else lines.push(w); }
+      lines.forEach((l, i) => { const [x, top, max] = slots[i], t = fitText(f, l, size, max); pg.drawText(t.s, { x, y: H - top, size: t.size, font: f, color: ink }); });
+    }
 
     // Übergabe
     txt([d.ort, d.datum].filter(Boolean).join(", "), 160, 789.4, 140);

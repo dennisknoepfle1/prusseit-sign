@@ -492,7 +492,6 @@ async function search(){
   $("#listErr").hidden = !error; if (error){ $("#listErr").textContent = "Suche geht gerade nicht: " + error.message; return; }
   const L = $("#list");
   // Testfahrzeug: immer oben, speichert nichts, schickt die Dokumente nur an dich selbst
-  if (!q || /test/i.test(q)) data.unshift(TEST_DEAL);
   if (!data.length){ L.innerHTML = '<p class="empty">Kein unterschriebener Vertrag gefunden.</p>'; return; }
   L.innerHTML = data.map((r, i) => {
     if (r.test) return '<button class="card test" data-i="' + i + '"><span class="nr">TEST · zum Ausprobieren</span><b>Testfahrzeug</b><span class="veh">Max Mustermann · VW Golf VIII. Es wird nichts gespeichert, die Dokumente gehen nur an dich.</span><span class="foot"><span class="pill open">Test</span></span></button>';
@@ -504,7 +503,6 @@ async function search(){
   L.querySelectorAll(".card").forEach(c => c.onclick = () => openDeal(data[+c.dataset.i]));
 }
 
-const TEST_DEAL = { test:true, id:"test", contract_no:"TEST", vehicle:"VW Golf VIII (Test)", customer_name:"Max Mustermann", seller_name:"Testverkäufer", original_path:"vorlagen/test-kaufvertrag.pdf" };
 
 /* ---------- Kaufvertrag auslesen (Seite 1) ---------- */
 const WMI = { WVW:"VW", WVG:"VW", WV1:"VW", WV2:"VW", WAU:"Audi", WUA:"Audi", TRU:"Audi", WBA:"BMW", WBS:"BMW", WBY:"BMW", WMW:"MINI", WDD:"Mercedes-Benz", WDB:"Mercedes-Benz", W1K:"Mercedes-Benz", W1N:"Mercedes-Benz", W1V:"Mercedes-Benz", WDC:"Mercedes-Benz",
@@ -584,7 +582,8 @@ async function openDeal(r){
 }
 function fresh(r, kv){
   return { vorgang:r.contract_no, verkaeufer:kv?.verkaeufer || r.seller_name, auslieferer: me.full_name || me.email,
-    kunde:{ name:r.customer_name }, fz:{}, zahlung:{}, checks:{}, pruef:{}, probefahrt:true, kmAus:"", schluessel:2 };
+    kunde:{ name:r.customer_name }, fz:{}, zahlung:{}, checks:{}, pruef:{}, probefahrt:true, kmAus:"", schluessel:2,
+    bemerkungen:"Allgemeine Gebrauchsspuren, dem Alter und der Laufleistung entsprechend." };
 }
 function mergeKv(d, kv){
   const fill = (o, src) => Object.entries(src || {}).forEach(([k, v]) => { if (v != null && v !== "" && (o[k] == null || o[k] === "")) o[k] = v; });
@@ -619,6 +618,7 @@ function renderDel(){
     if (k === "_probe") d.probefahrt = v; else if (k === "_unfall") fz.unfallfrei = v; else d.pruef[k] = v;
     r.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); save(); cgSum();
   }));
+  d.bemerkungen ??= "Allgemeine Gebrauchsspuren, dem Alter und der Laufleistung entsprechend.";
   $("#sonst").value = d.sonstiges || ""; $("#bem").value = d.bemerkungen || "";
   sigUi(); cgSum(); progress();
 }
