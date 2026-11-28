@@ -1,0 +1,768 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Auslieferung">
+<meta name="theme-color" content="#0E0C0D">
+<title>Prusseit Auslieferung</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Auslieferungsportal: fürs iPad gebaut. Große Tippflächen, eine Seite von oben nach unten, unten immer der nächste Schritt. */
+:root{
+  --bg:#F4F2F1; --surface:#FFFFFF; --surface-2:#FAF9F8; --ink:#16131A; --muted:#6A6265; --line:#E6E1E2; --line-2:#D9D3D4;
+  --red:#E3001B; --red-hi:#FF1F3A; --red-ink:#B30016; --red-soft:#FDE8EA; --ok:#1E7A4C; --ok-soft:#E4F4EB; --warn:#9A6200; --warn-soft:#FFF4DD;
+  --sig:#14306E; --bar:#0B0A0B; --bar-fg:#F5F3F3; --bar-muted:#8E8689;
+  --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:16px; --r-sm:12px;
+  --sh-1:0 1px 2px rgba(22,19,26,.05),0 2px 8px rgba(22,19,26,.04);
+  --sh-2:0 2px 4px rgba(22,19,26,.05),0 12px 32px rgba(22,19,26,.08);
+  --sh-red:0 6px 20px rgba(227,0,27,.28);
+  --ease:cubic-bezier(.2,.8,.2,1); --ease-out:cubic-bezier(.16,1,.3,1);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#110F10; --surface:#1A1718; --surface-2:#211D1F; --ink:#F3EFF0; --muted:#A39A9D; --line:#2E292B; --line-2:#3A3436;
+  --red:#FF2A40; --red-hi:#FF4A5D; --red-ink:#FF6474; --red-soft:#3A1519; --ok:#4DC48B; --ok-soft:#14301F; --warn:#F0B75A; --warn-soft:#33270F;
+  --sh-1:0 1px 2px rgba(0,0,0,.3); --sh-2:0 12px 32px rgba(0,0,0,.4); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#110F10; --surface:#1A1718; --surface-2:#211D1F; --ink:#F3EFF0; --muted:#A39A9D; --line:#2E292B; --line-2:#3A3436;
+  --red:#FF2A40; --red-hi:#FF4A5D; --red-ink:#FF6474; --red-soft:#3A1519; --ok:#4DC48B; --ok-soft:#14301F; --warn:#F0B75A; --warn-soft:#33270F;
+  --sh-1:0 1px 2px rgba(0,0,0,.3); --sh-2:0 12px 32px rgba(0,0,0,.4); color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:17px;line-height:1.45;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bar)}
+button,input,select,textarea{font:inherit;color:inherit}
+.gutter{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--f-display);text-transform:uppercase;letter-spacing:.02em;line-height:1.02;margin:0}
+h1{font-size:clamp(34px,5vw,52px);font-weight:700}
+h1 .acc{color:var(--red)}
+h2{font-size:24px;font-weight:700}
+p{margin:0}
+.muted{color:var(--muted)}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--red-ink);margin-bottom:8px}
+.eyebrow::before{content:"";width:18px;height:2px;background:var(--red);border-radius:2px}
+.label{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.12);opacity:1}100%{transform:scale(1)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.enter{animation:rise .5s var(--ease-out) backwards}
+
+/* Kopfleiste */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:color-mix(in srgb,var(--bar) 90%,transparent);-webkit-backdrop-filter:saturate(1.4) blur(14px);backdrop-filter:saturate(1.4) blur(14px);color:var(--bar-fg);border-bottom:1px solid rgba(255,255,255,.06)}
+.bar-in{display:flex;align-items:center;gap:14px;padding-block:12px;max-width:1100px;margin:0 auto;min-height:44px}
+.brand{display:flex;align-items:center;gap:12px;white-space:nowrap}
+.brand img{height:34px;width:auto;display:block}
+.brand em{font-style:normal;font-family:var(--f-display);font-weight:600;font-size:13px;letter-spacing:.22em;color:var(--bar-muted);text-transform:uppercase;padding-left:12px;border-left:1px solid #2e292b;line-height:26px}
+.user{display:flex;align-items:center;gap:10px;margin-left:auto;font-size:14px;color:var(--bar-muted)}
+.user b{color:var(--bar-fg);font-weight:600}
+.barbtn{border:1px solid #2e292b;background:transparent;color:var(--bar-fg);border-radius:999px;padding:10px 16px;font-size:15px;font-weight:500;cursor:pointer;min-height:44px}
+.av-sm{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--red);color:#fff;font-family:var(--f-display);font-weight:700;font-size:14px}
+@media (max-width:720px){.user .uname,.brand em{display:none}}
+
+main{max-width:1100px;margin:0 auto;padding-block:26px 140px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:22px;box-shadow:var(--sh-1);min-width:0}
+.panel + .panel{margin-top:18px}
+.panel-h{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.panel-h .num{width:34px;height:34px;flex:none;border-radius:50%;display:grid;place-items:center;background:var(--ink);color:var(--surface);font-family:var(--f-display);font-weight:700;font-size:17px}
+.panel-h .num.ok{background:var(--ok);color:#fff}
+.panel-h h2{flex:1}
+.panel-h .state{font-size:14px;font-weight:600;color:var(--muted)}
+
+.btn{min-height:56px;padding:0 24px;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--surface);font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:10px;font-size:17px;transition:transform .15s var(--ease),box-shadow .2s,background .2s,border-color .2s;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+.btn:active:not(:disabled){transform:scale(.97)}
+.btn.primary{background:linear-gradient(180deg,var(--red-hi),var(--red));border-color:var(--red);color:#fff;box-shadow:var(--sh-red)}
+.btn.primary:disabled{background:var(--line);border-color:var(--line);color:var(--muted);box-shadow:none;cursor:not-allowed}
+.btn.dark{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.btn.ghost{background:transparent}
+.btn.small{min-height:44px;padding:0 16px;font-size:15px}
+.btn.block{width:100%}
+.btn.busy::after{content:"";width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
+
+.fld{display:flex;flex-direction:column;gap:7px;min-width:0}
+.fld input,.fld textarea,.fld select{min-height:54px;padding:0 15px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface-2);width:100%;font-size:18px}
+.fld textarea{padding:12px 15px;min-height:80px;resize:vertical}
+.fld input:focus,.fld textarea:focus{outline:none;border-color:var(--red);background:var(--surface);box-shadow:0 0 0 4px rgba(227,0,27,.12)}
+.fld.need input{border-color:var(--red);background:var(--red-soft)}
+.fld .from{font-size:12px;color:var(--ok);font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.toast{font-size:15px;padding:12px 14px;border-radius:var(--r-sm);background:var(--ok-soft);color:var(--ok);animation:rise .35s var(--ease-out) backwards}
+.toast.err{background:var(--red-soft);color:var(--red-ink)}
+.toast.warn{background:var(--warn-soft);color:var(--warn)}
+
+/* Anmeldung */
+body.authing{background:#070606}
+body.authing .bar{display:none}
+body.authing main{max-width:none;padding:0}
+.authwrap{position:relative;min-height:100vh;min-height:100dvh;display:grid;place-items:center;overflow:hidden;padding:24px 16px;background:#070606;color:#fff}
+.authwrap::before{content:"";position:absolute;inset:-20%;background:radial-gradient(40vmax 40vmax at 15% 20%,rgba(227,0,27,.35),transparent 60%),radial-gradient(35vmax 35vmax at 90% 85%,rgba(227,0,27,.2),transparent 60%)}
+.auth{position:relative;z-index:1;width:100%;max-width:440px;display:flex;flex-direction:column;align-items:center;gap:24px}
+.auth > img{width:220px;height:auto}
+.auth .panel{width:100%;display:flex;flex-direction:column;gap:14px;background:rgba(26,23,24,.72);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.08);color:#F3EFF0;border-radius:20px;padding:28px}
+.auth h1{font-size:40px;color:#fff}
+.auth .muted,.auth .label{color:#A79FA2}
+.auth .fld input{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.1);color:#fff}
+.linkbtn{border:0;background:none;color:var(--red-ink);font-weight:600;cursor:pointer;padding:6px 0}
+.auth .linkbtn{color:#FF6474}
+
+/* Suche */
+.search{position:relative;margin-top:22px}
+.search input{width:100%;min-height:64px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface);padding:0 20px 0 54px;font-size:20px;box-shadow:var(--sh-1)}
+.search input:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 4px rgba(227,0,27,.12)}
+.search svg{position:absolute;left:18px;top:50%;transform:translateY(-50%);color:var(--muted)}
+.list{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-top:18px}
+.card{display:flex;flex-direction:column;gap:6px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;cursor:pointer;box-shadow:var(--sh-1);transition:transform .15s var(--ease),border-color .2s;animation:rise .45s var(--ease-out) backwards;min-height:132px}
+.card:active{transform:scale(.98)}
+.card .nr{font-family:var(--f-mono);font-size:13px;color:var(--muted)}
+.card b{font-size:20px;line-height:1.2}
+.card .veh{font-size:15px;color:var(--muted)}
+.card .foot{margin-top:auto;display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted);padding-top:6px}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:13px;font-weight:600;background:var(--surface-2);border:1px solid var(--line)}
+.pill.ok{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.pill.open{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.empty{padding:40px 10px;text-align:center;color:var(--muted)}
+
+/* Auslieferung */
+.head{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;justify-content:space-between}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 18px}
+.fact{min-width:0}
+.fact span{display:block;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.fact b{display:block;font-size:18px;font-weight:600;overflow-wrap:anywhere}
+.chips{display:flex;flex-wrap:wrap;gap:10px}
+.chip{min-height:52px;padding:0 18px;border-radius:999px;border:1.5px solid var(--line-2);background:var(--surface);font-weight:600;font-size:16px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;touch-action:manipulation;transition:background .15s,border-color .15s,color .15s}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.chip.okc[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:#fff}
+
+.checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:10px}
+.group-t{grid-column:1/-1;margin-top:8px}
+.ck{display:flex;align-items:stretch;border:1.5px solid var(--line);border-radius:var(--r-sm);background:var(--surface-2);min-height:68px;overflow:hidden;transition:border-color .2s,background .2s}
+.ck .tap{flex:1;display:flex;align-items:center;gap:14px;border:0;background:none;text-align:left;padding:10px 14px;cursor:pointer;font-size:17px;font-weight:500;touch-action:manipulation}
+.ck .box{width:34px;height:34px;flex:none;border-radius:10px;border:2px solid var(--line-2);display:grid;place-items:center;background:var(--surface);transition:all .2s var(--ease)}
+.ck .box svg{opacity:0;transform:scale(.5);transition:all .25s var(--ease-out)}
+.ck.ok{border-color:var(--ok);background:var(--ok-soft)}
+.ck.ok .box{background:var(--ok);border-color:var(--ok);color:#fff}
+.ck.ok .box svg{opacity:1;transform:none}
+.ck.na{background:var(--surface-2);border-style:dashed}
+.ck.na .tap{color:var(--muted);text-decoration:line-through}
+.ck .na-btn{border:0;border-left:1px solid var(--line);background:none;padding:0 14px;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;min-width:92px}
+.ck.na .na-btn{color:var(--ink);background:var(--line)}
+.ck.miss{border-color:var(--red);animation:pop .4s var(--ease-out)}
+
+.cg-sum{display:flex;align-items:center;gap:14px;padding:16px;border-radius:var(--r-sm);background:var(--ok-soft);color:var(--ok);font-weight:600}
+.cg-sum.dev{background:var(--warn-soft);color:var(--warn)}
+.cg-sum .ic{width:40px;height:40px;border-radius:50%;background:currentColor;display:grid;place-items:center;flex:none}
+.cg-sum .ic svg{color:var(--surface)}
+.pr{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:8px;margin-top:14px}
+.pr-row{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 14px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px}
+.pr-row span{flex:1}
+.seg{display:inline-flex;border:1.5px solid var(--line-2);border-radius:10px;overflow:hidden;flex:none}
+.seg button{border:0;background:var(--surface);min-width:64px;min-height:44px;font-weight:600;cursor:pointer;font-size:15px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+.seg button.bad[aria-pressed="true"]{background:var(--red);color:#fff}
+details.more{margin-top:14px}
+details.more summary{cursor:pointer;font-weight:600;color:var(--red-ink);min-height:44px;display:flex;align-items:center}
+
+.sigs{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.sigbox{border:1.5px dashed var(--line-2);border-radius:var(--r-sm);min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:12px;background:var(--surface-2);cursor:pointer;text-align:center}
+.sigbox img{max-width:100%;height:80px;object-fit:contain;filter:none}
+.sigbox.done{border-style:solid;border-color:var(--ok);background:var(--surface)}
+.sigbox b{font-size:17px}
+
+/* Unten: Fortschritt und nächster Schritt */
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:6;background:color-mix(in srgb,var(--surface) 92%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid var(--line);padding-top:12px;padding-bottom:max(12px,env(safe-area-inset-bottom,0px))}
+.dock-in{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:16px}
+.dock .meter{flex:1;min-width:0}
+.dock .meter small{display:block;font-size:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dock .track{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:6px}
+.dock .track i{display:block;height:100%;width:0;background:var(--ok);border-radius:99px;transition:width .4s var(--ease-out)}
+
+/* Unterschriftsfeld (Vollbild) */
+.pad{position:fixed;inset:0;z-index:40;background:var(--bg);display:flex;flex-direction:column;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));gap:14px;animation:rise .35s var(--ease-out)}
+.pad[hidden]{display:none}
+.pad .who{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.pad .txt{font-size:16px;color:var(--muted);max-width:70ch}
+.pad .area{position:relative;flex:1;min-height:220px;background:#fff;border:1.5px solid var(--line-2);border-radius:var(--r);overflow:hidden;touch-action:none}
+.pad canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+.pad .base{position:absolute;left:6%;right:6%;bottom:28%;border-bottom:1.5px solid #c9c2c4;pointer-events:none}
+.pad .base::before{content:"✕";position:absolute;left:0;bottom:6px;color:#b7afb1;font-size:22px}
+.pad .ph{position:absolute;left:0;right:0;top:38%;text-align:center;color:#b7afb1;font-size:20px;pointer-events:none}
+.pad .acts{display:flex;gap:12px;justify-content:flex-end;flex-wrap:wrap}
+
+/* Übergabe ans Kundengerät */
+.hand{position:fixed;inset:0;z-index:35;background:#070606;color:#fff;display:grid;place-items:center;padding:24px;text-align:center}
+.hand[hidden]{display:none}
+.hand .in{max-width:560px;display:flex;flex-direction:column;align-items:center;gap:18px}
+.hand h1{color:#fff}
+.hand p{color:#cfc8ca;font-size:19px}
+.hand .sum{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:var(--r);padding:16px 18px;text-align:left;width:100%;font-size:16px;color:#e8e3e4}
+.hand .sum b{color:#fff}
+
+.done-ic{width:84px;height:84px;border-radius:50%;background:var(--ok);display:grid;place-items:center;color:#fff;animation:pop .6s var(--ease-out)}
+.docs{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:18px}
+.doc{display:flex;align-items:center;gap:14px;padding:18px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);cursor:pointer;text-align:left;min-height:84px}
+.doc .ic{width:46px;height:56px;border-radius:8px;background:var(--red-soft);color:var(--red-ink);display:grid;place-items:center;font-family:var(--f-mono);font-size:12px;font-weight:600;flex:none}
+.doc b{display:block;font-size:17px}
+.doc small{color:var(--muted)}
+.staff{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.staff-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm)}
+.staff-row span{flex:1;min-width:0;overflow-wrap:anywhere}
+[hidden]{display:none !important}
+</style>
+</head>
+<body class="authing">
+<header class="bar">
+  <div class="bar-in gutter">
+    <div class="brand"><img src="logo-white.webp" alt="Autowelt Prusseit" width="119" height="34"><em>Auslieferung</em></div>
+    <div class="user" id="userBar" hidden>
+      <a class="barbtn" id="toSign" href="./" hidden style="text-decoration:none;display:inline-flex;align-items:center">Verträge</a>
+      <span class="av-sm" id="userAv" aria-hidden="true"></span><span class="uname"><b id="userName"></b></span>
+      <button class="barbtn" id="logout">Abmelden</button>
+    </div>
+  </div>
+</header>
+
+<main class="gutter">
+  <!-- Anmeldung -->
+  <section id="vAuth" hidden>
+    <div class="authwrap"><div class="auth">
+      <img src="logo-white.webp" alt="Autowelt Prusseit" width="220" height="63">
+      <div class="panel">
+        <h1 id="authTitle">Auslieferung</h1>
+        <p class="muted" id="authLede">Melde dich mit deiner E-Mail und deinem Passwort an.</p>
+        <label class="fld" id="authNameRow" hidden><span class="label">Vor- und Nachname</span><input id="authName" autocomplete="name"></label>
+        <label class="fld"><span class="label">E-Mail</span><input id="authMail" type="email" autocomplete="username" inputmode="email"></label>
+        <label class="fld"><span class="label">Passwort</span><input id="authPw" type="password" autocomplete="current-password"></label>
+        <div class="toast err" id="authErr" hidden></div>
+        <button class="btn primary block" id="authGo">Anmelden</button>
+        <p class="muted" style="font-size:15px"><span id="authSwitchTx">Zum ersten Mal hier?</span> <button class="linkbtn" id="authSwitch">Konto anlegen</button></p>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- Suche -->
+  <section id="vList" hidden>
+    <span class="eyebrow">Auslieferung</span>
+    <h1>Welches Auto <span class="acc">lieferst du aus?</span></h1>
+    <label class="search">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="Kunde, Vorgang (#581) oder Fahrzeug" autocomplete="off" enterkeyhint="search">
+    </label>
+    <div class="toast err" id="listErr" hidden style="margin-top:14px"></div>
+    <div class="list" id="list"></div>
+
+    <div class="panel" id="noAccess" hidden style="margin-top:22px">
+      <div class="panel-h"><h2>Noch kein Zugang</h2></div>
+      <p class="muted">Dein Konto ist für die Auslieferung noch nicht freigeschaltet. Bitte gib Dennis Bescheid.</p>
+    </div>
+  </section>
+
+  <!-- Auslieferung -->
+  <section id="vDel" hidden>
+    <div class="head">
+      <div>
+        <span class="eyebrow" id="dNr">Vorgang</span>
+        <h1 id="dTitle">Auslieferung</h1>
+        <p class="muted" id="dSub" style="margin-top:6px"></p>
+      </div>
+      <button class="btn ghost small" id="back">← Andere Auslieferung</button>
+    </div>
+    <div class="toast warn" id="kvWarn" hidden style="margin-top:16px"></div>
+
+    <div class="panel" style="margin-top:22px">
+      <div class="panel-h"><span class="num" id="n1">1</span><h2>Fahrzeug und Kunde</h2><span class="state">aus dem Kaufvertrag</span></div>
+      <div class="facts" id="facts"></div>
+      <div class="grid" style="margin-top:18px">
+        <label class="fld" id="fKm"><span class="label">km-Stand bei Auslieferung *</span><input id="km" inputmode="numeric" placeholder="z. B. 85.702"></label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h"><span class="num" id="n2">2</span><h2>Zahlung</h2><span class="state" id="payWeise"></span></div>
+      <p class="label" style="margin-bottom:10px">Wie wurde bezahlt?</p>
+      <div class="chips" id="payArt"></div>
+      <div class="chips" style="margin-top:12px"><button class="chip" id="inz" aria-pressed="false">+ mit Inzahlungnahme</button></div>
+      <p class="label" style="margin:18px 0 10px" id="payChkL"></p>
+      <div class="chips" id="payChk"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h"><span class="num" id="n3">3</span><h2>Auslieferungscheckliste</h2><span class="state" id="ckState"></span></div>
+      <p class="label" style="margin-bottom:10px">Zulassung</p>
+      <div class="chips" id="zul" style="margin-bottom:20px"></div>
+      <p class="muted" style="margin-bottom:14px">Tippe jeden Punkt an, wenn er erledigt ist. Was nicht zutrifft, auf „entfällt“ setzen.</p>
+      <div class="checks" id="checks"></div>
+      <div class="grid" style="margin-top:16px">
+        <div class="fld"><span class="label">Anzahl Schlüssel</span><div class="chips" id="keys"></div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h"><span class="num ok" id="n4">4</span><h2>CarGarantie-Übergabezertifikat</h2><span class="state">vorausgefüllt</span></div>
+      <div class="cg-sum" id="cgSum">
+        <span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+        <span id="cgSumTx">Alles in Ordnung: privat genutzt, Kunde kauft privat, Probefahrt gemacht, alle 27 Prüfpunkte ohne Beanstandung.</span>
+      </div>
+      <details class="more" id="cgMore">
+        <summary>Abweichung eintragen</summary>
+        <div class="pr" id="pr"></div>
+        <div class="grid" style="margin-top:14px">
+          <label class="fld"><span class="label">Sonstiges (links unten)</span><input id="sonst" placeholder="z. B. Gebrauchsspuren ringsum"></label>
+          <label class="fld"><span class="label">Sonstige Bemerkungen (rechts unten)</span><input id="bem"></label>
+        </div>
+      </details>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h"><span class="num" id="n5">5</span><h2>Unterschriften</h2></div>
+      <p class="muted" style="margin-bottom:14px">Erst unterschreibst du, dann gibst du das iPad dem Kunden. Die Unterschriften kommen auf beide Dokumente.</p>
+      <div class="sigs">
+        <button class="sigbox" id="sigAusl"><b>Auslieferer</b><span class="muted" id="sigAuslTx">Tippen zum Unterschreiben</span></button>
+        <button class="sigbox" id="sigKunde"><b>Käufer</b><span class="muted" id="sigKundeTx">Tippen zum Unterschreiben</span></button>
+      </div>
+    </div>
+    <div class="toast err" id="delErr" hidden style="margin-top:16px"></div>
+  </section>
+
+  <!-- Fertig -->
+  <section id="vDone" hidden>
+    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:16px">
+      <span class="done-ic"><svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+      <span class="eyebrow" id="doneNr"></span>
+      <h1>Ausgeliefert. <span class="acc">Gute Fahrt!</span></h1>
+      <p class="muted" id="doneSub"></p>
+    </div>
+    <div class="docs" id="docs"></div>
+    <div style="margin-top:26px;display:flex;gap:12px;flex-wrap:wrap"><button class="btn primary" id="next">Nächste Auslieferung →</button></div>
+  </section>
+</main>
+
+<div class="dock" id="dock" hidden>
+  <div class="dock-in gutter">
+    <div class="meter"><small id="dockTx"></small><div class="track"><i id="dockBar"></i></div></div>
+    <button class="btn primary" id="dockGo">Weiter</button>
+  </div>
+</div>
+
+<div class="hand" id="hand" hidden>
+  <div class="in">
+    <img src="logo-white.webp" alt="Autowelt Prusseit" width="200" height="57">
+    <h1>Gib das iPad jetzt <span id="handName"></span></h1>
+    <div class="sum" id="handSum"></div>
+    <button class="btn primary block" id="handGo">Ich bin der Käufer, weiter zur Unterschrift</button>
+    <button class="linkbtn" id="handBack" style="color:#FF6474">Zurück</button>
+  </div>
+</div>
+
+<div class="pad" id="pad" hidden>
+  <div class="who">
+    <div><span class="eyebrow" id="padRole"></span><h2 id="padName"></h2></div>
+  </div>
+  <p class="txt" id="padTxt"></p>
+  <div class="area"><canvas id="padCv"></canvas><span class="base"></span><span class="ph" id="padPh">Hier unterschreiben</span></div>
+  <div class="acts">
+    <button class="btn ghost" id="padCancel">Abbrechen</button>
+    <button class="btn" id="padClear">Löschen</button>
+    <button class="btn primary" id="padOk" disabled>Unterschrift übernehmen</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="auslieferung-pdf.js"></script>
+<script>
+"use strict";
+const $ = q => document.querySelector(q);
+const SB_URL = "https://shhtnbarfnhuizhnqpac.supabase.co";
+const SB_KEY = "sb_publishable_k-rpelA6uCSFfiisxi7rZA_pH5bow7k";
+const sb = window.SB_MOCK || supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession:true, autoRefreshToken:true } });
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+const TZ = "Europe/Berlin", ORT = "Horb am Neckar";
+const initials = n => (n||"?").split(/[\s.@]+/).filter(Boolean).slice(0,2).map(w => w[0].toUpperCase()).join("");
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+const fmtD = d => new Intl.DateTimeFormat("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:TZ}).format(d);
+const fmtT = d => new Intl.DateTimeFormat("de-DE",{hour:"2-digit",minute:"2-digit",timeZone:TZ}).format(d);
+async function sha256(b){ const d = await crypto.subtle.digest("SHA-256", b); return [...new Uint8Array(d)].map(x => x.toString(16).padStart(2,"0")).join(""); }
+const show = id => { ["#vAuth","#vList","#vDel","#vDone"].forEach(q => $(q).hidden = q !== id); const el = $(id); el.classList.remove("enter"); void el.offsetWidth; el.classList.add("enter"); $("#dock").hidden = id !== "#vDel"; window.scrollTo(0, 0); };
+let me = null;
+const D = { deal:null, id:null, data:null, kv:null, sig:{}, saveT:null, files:null };
+
+/* ---------- Anmeldung ---------- */
+let signup = false;
+function setAuth(up){
+  signup = up;
+  $("#authTitle").textContent = up ? "Konto anlegen" : "Auslieferung";
+  $("#authLede").textContent = up ? "Mit deiner Firmenadresse oder der Adresse, die die Autowelt Prusseit für dich freigeschaltet hat." : "Melde dich mit deiner E-Mail und deinem Passwort an.";
+  $("#authNameRow").hidden = !up; $("#authGo").textContent = up ? "Konto anlegen" : "Anmelden";
+  $("#authPw").autocomplete = up ? "new-password" : "current-password";
+  $("#authSwitchTx").textContent = up ? "Schon ein Konto?" : "Zum ersten Mal hier?";
+  $("#authSwitch").textContent = up ? "Anmelden" : "Konto anlegen"; $("#authErr").hidden = true;
+}
+$("#authSwitch").onclick = () => setAuth(!signup);
+const authMsg = e => { const m = (e?.message||String(e)).toLowerCase();
+  if (m.includes("invalid login")) return "E-Mail oder Passwort stimmt nicht.";
+  if (m.includes("autowelt-prusseit") || m.includes("database error saving new user")) return "Diese Adresse ist nicht freigeschaltet. Bitte bei der Autowelt Prusseit melden.";
+  if (m.includes("already registered")) return "Für diese Adresse gibt es schon ein Konto. Bitte anmelden.";
+  if (m.includes("password")) return "Das Passwort muss mindestens 8 Zeichen haben.";
+  if (m.includes("email not confirmed")) return "Bitte zuerst den Link in der Bestätigungs-Mail öffnen.";
+  return "Das hat nicht geklappt: " + (e?.message||e); };
+$("#authGo").onclick = async () => {
+  const email = $("#authMail").value.trim().toLowerCase(), password = $("#authPw").value, name = $("#authName").value.trim(), err = $("#authErr");
+  err.hidden = true; err.className = "toast err";
+  if (signup && !name){ err.textContent = "Bitte deinen Namen eintragen."; err.hidden = false; return; }
+  if (password.length < 8){ err.textContent = "Das Passwort muss mindestens 8 Zeichen haben."; err.hidden = false; return; }
+  const b = $("#authGo"); b.disabled = true; b.classList.add("busy");
+  try {
+    const r = signup ? await sb.auth.signUp({ email, password, options:{ data:{ full_name:name }, emailRedirectTo: location.href.split("?")[0] } })
+                     : await sb.auth.signInWithPassword({ email, password });
+    if (r.error) throw r.error;
+    if (signup && !r.data.session){ err.className = "toast"; err.textContent = "Fast geschafft: Bitte den Link in der Mail an " + email + " öffnen."; err.hidden = false; }
+  } catch(e){ err.textContent = authMsg(e); err.hidden = false; }
+  finally { b.disabled = false; b.classList.remove("busy"); }
+};
+$("#authPw").addEventListener("keydown", e => { if (e.key === "Enter") $("#authGo").click(); });
+$("#logout").onclick = () => sb.auth.signOut();
+
+async function onSession(s){
+  if (!s){ me = null; document.body.classList.add("authing"); $("#userBar").hidden = true; show("#vAuth"); return; }
+  if (me?.id === s.user.id) return;
+  const { data } = await sb.from("profiles").select("id,email,full_name,role,can_sign,can_deliver").eq("id", s.user.id).single();
+  if (!data){ await sb.auth.signOut(); return; }
+  me = data;
+  document.body.classList.remove("authing");
+  $("#userBar").hidden = false; $("#userName").textContent = me.full_name || me.email; $("#userAv").textContent = initials(me.full_name || me.email);
+  const admin = me.role === "admin";
+  $("#toSign").hidden = !(admin || me.can_sign);
+  if (!(admin || me.can_deliver)){ show("#vList"); $("#noAccess").hidden = false; $("#q").closest(".search").hidden = true; $("#list").innerHTML = ""; return; }
+  $("#noAccess").hidden = true; $("#q").closest(".search").hidden = false;
+  const open = new URLSearchParams(location.search).get("deal");
+  showList();
+  if (open){ const r = (await sb.rpc("delivery_search", { q:"" })).data?.find(x => x.id === open); if (r) openDeal(r); }
+}
+sb.auth.onAuthStateChange((_e, s) => setTimeout(() => onSession(s), 0));
+
+/* ---------- Suche ---------- */
+let qT = null, qN = 0;
+$("#q").addEventListener("input", () => { clearTimeout(qT); qT = setTimeout(search, 250); });
+async function showList(){ show("#vList"); search(); }
+async function search(){
+  const n = ++qN, q = $("#q").value.trim();
+  const { data, error } = await sb.rpc("delivery_search", { q });
+  if (n !== qN) return;
+  $("#listErr").hidden = !error; if (error){ $("#listErr").textContent = "Suche geht gerade nicht: " + error.message; return; }
+  const L = $("#list");
+  if (!data.length){ L.innerHTML = '<p class="empty">Kein unterschriebener Vertrag gefunden.</p>'; return; }
+  L.innerHTML = data.map((r, i) => {
+    const st = r.delivery_status === "done" ? '<span class="pill ok">✓ ausgeliefert ' + (r.delivered_at ? fmtD(new Date(r.delivered_at)) : "") + '</span>'
+      : r.delivery_status === "open" ? '<span class="pill open">in Auslieferung · ' + esc(r.delivery_by || "") + '</span>' : "";
+    return '<button class="card" data-i="' + i + '" style="animation-delay:' + Math.min(i, 12) * 30 + 'ms"><span class="nr">' + esc(r.contract_no || "") + ' · unterschrieben ' + (r.signed_at ? fmtD(new Date(r.signed_at)) : "") +
+      '</span><b>' + esc(r.customer_name) + '</b><span class="veh">' + esc(r.vehicle || "") + '</span><span class="foot">' + st + '<span style="margin-left:auto">' + esc(r.seller_name || "") + '</span></span></button>';
+  }).join("");
+  L.querySelectorAll(".card").forEach(c => c.onclick = () => openDeal(data[+c.dataset.i]));
+}
+
+/* ---------- Kaufvertrag auslesen (Seite 1) ---------- */
+const WMI = { WVW:"VW", WVG:"VW", WV1:"VW", WV2:"VW", WAU:"Audi", WUA:"Audi", TRU:"Audi", WBA:"BMW", WBS:"BMW", WBY:"BMW", WMW:"MINI", WDD:"Mercedes-Benz", WDB:"Mercedes-Benz", W1K:"Mercedes-Benz", W1N:"Mercedes-Benz", W1V:"Mercedes-Benz", WDC:"Mercedes-Benz",
+  WF0:"Ford", WF1:"Ford", W0L:"Opel", W0V:"Opel", VSS:"Seat", VSE:"Seat", TMB:"Skoda", VF1:"Renault", VF3:"Peugeot", VF7:"Citroën", VR3:"Peugeot", VR7:"Citroën", VXK:"Opel", ZFA:"Fiat", ZFF:"Ferrari", ZAR:"Alfa Romeo", ZHW:"Lamborghini",
+  WP0:"Porsche", WP1:"Porsche", JTD:"Toyota", JTN:"Toyota", JTM:"Toyota", SB1:"Toyota", VNK:"Toyota", NMT:"Toyota", JMZ:"Mazda", JMB:"Mitsubishi", JN1:"Nissan", SJN:"Nissan", VSK:"Nissan", JHM:"Honda", SHH:"Honda", KNA:"Kia", KNE:"Kia", U5Y:"Kia", KMH:"Hyundai", TMA:"Hyundai", NLH:"Hyundai",
+  YV1:"Volvo", YV4:"Volvo", LVY:"Volvo", SAL:"Land Rover", SAJ:"Jaguar", VF8:"Smart", WME:"Smart", JSA:"Suzuki", TSM:"Suzuki", UU1:"Dacia", VWV:"VW", LRW:"Tesla", XP7:"Tesla", "5YJ":"Tesla", LSJ:"MG", SAR:"Rover", JF1:"Subaru", ZCF:"Iveco", LJ1:"BYD", LGX:"BYD" };
+async function readKv(path){
+  const { data, error } = await sb.storage.from("contracts").createSignedUrl(path, 300);
+  if (error) throw error;
+  const pdf = await pdfjsLib.getDocument({ url:data.signedUrl, disableAutoFetch:true, disableStream:true }).promise;
+  try {
+    const page = await pdf.getPage(1), [x0, y0, x1, y1] = page.view, W = x1 - x0, H = y1 - y0;
+    const it = (await page.getTextContent()).items.filter(i => i.str && i.str.trim()).map(i => ({ s:i.str.trim(), x:i.transform[4]-x0, y:i.transform[5]-y0 }));
+    const out = { kunde:{}, fz:{}, zahlung:{} };
+    const row = (lab, fuzzy) => { const l = it.find(i => fuzzy ? fuzzy.test(i.s) : i.s === lab); if (!l) return null;
+      const right = it.filter(i => Math.abs(i.y - l.y) < 2.5 && i.x > l.x + 2).sort((a,b) => a.x - b.x);
+      const nextLab = right.find(i => LABELS.has(i.s)); return right.filter(i => i !== l && (!nextLab || i.x < nextLab.x) && !LABELS.has(i.s)).map(i => i.s).join(" ").trim() || null; };
+    const LABELS = new Set(["FIN","HSN/TSN","Leistung","nächste HU","Kilometerstand","Garantiebeginn","Erstzulassung","Ex-Nutzungsart","Vorbesitzer","Farbe","Vorschaden","Schaden Details"]);
+    out.fz.fin = (row("FIN") || "").toUpperCase().replace(/\s/g, "") || null;
+    out.fz.kw = row("Leistung"); out.fz.hu = row("nächste HU"); out.fz.km = (row("Kilometerstand") || "").replace(/\s*km$/i, "") || null;
+    out.fz.ez = row("Erstzulassung"); out.fz.vorbesitzer = row("Vorbesitzer"); out.fz.farbe = row("Farbe");
+    const vs = row("Vorschaden"); out.fz.vorschaden = vs;
+    out.fz.unfallfrei = !vs || /^(nein|keine?n?|unfallfrei|-)$/i.test(vs) ? true : /^ja\b|unfall/i.test(vs) ? false : null;
+    out.fz.hersteller = out.fz.fin ? WMI[out.fz.fin.slice(0,3)] || null : null;
+    const kv = it.find(i => /^KAUFVERTRAG$/i.test(i.s));
+    if (kv){ const m = it.filter(i => i.y < kv.y - 14 && i.y > kv.y - 60 && i.x < W*0.35 && !/^(ÜBER|\(\+\))/.test(i.s)).sort((a,b) => b.y - a.y)[0]; out.fz.modell = m?.s || null; }
+    // Kundenblock links oben: Anrede, Name, Straße, PLZ Ort, E-Mail, Telefon
+    const left = it.filter(i => i.x < W*0.5 && i.y > H*0.65).sort((a,b) => b.y - a.y);
+    const sal = left.findIndex(i => /^(Herrn?|Frau|Firma|Eheleute)$/i.test(i.s));
+    if (sal >= 0){ const b = left.slice(sal + 1, sal + 8).filter(i => Math.abs(i.x - left[sal].x) < 6);
+      out.kunde.name = b[0]?.s; const lines = b.slice(1).map(i => i.s);
+      out.kunde.mail = (lines.find(s => /^E-Mail:/i.test(s)) || "").replace(/^E-Mail:\s*/i, "") || null;
+      out.kunde.tel = (lines.find(s => /^Telefon:/i.test(s)) || "").replace(/^Telefon:\s*/i, "") || null;
+      const addr = lines.filter(s => !/^(E-Mail|Telefon|Mobil|Fax):/i.test(s));
+      out.kunde.strasse = addr[0] || null; out.kunde.ort = addr[1] || null; }
+    out.verkaeufer = row(null, /^Es bediente Sie$/);
+    out.vorgang = (it.find(i => /^#\d+$/.test(i.s)) || {}).s || null;
+    out.zahlung.weise = row(null, /^Zahlungsweise:?$/);
+    out.zahlung.gesamt = row(null, /^Gesamtbetrag:?$/);
+    const anz = it.find(i => /Anzahlung/i.test(i.s) && /\d/.test(i.s));
+    out.zahlung.anzahlung = anz ? ((anz.s.match(/([\d.]+,(?:\d{2}|-))\s*(€|EUR)?/) || [])[0] || "").trim() || null : null;
+    if (out.zahlung.anzahlung && !/€|EUR/.test(out.zahlung.anzahlung)) out.zahlung.anzahlung += " €";
+    out.zahlung.inzahlung = it.some(i => /inzahlung/i.test(i.s));
+    return out;
+  } finally { pdf.destroy(); }
+}
+
+/* ---------- Auslieferung öffnen ---------- */
+const PAY = APDF.PAY, ZUL = APDF.ZUL;
+const items = () => APDF.itemsFor(D.data).flatMap(([g, its]) => its.map(([k, l, na]) => ({ k, l, na, g })));
+async function openDeal(r){
+  $("#listErr").hidden = true;
+  if (r.delivery_status === "done"){ return showDone(r); }
+  const card = [...document.querySelectorAll(".card")].find(c => c.querySelector("b")?.textContent === r.customer_name); card?.classList.add("busy");
+  try {
+    // eigene offene Auslieferung fortsetzen, sonst neu anlegen
+    let { data: v } = await sb.from("deliveries").select("*").eq("deal_id", r.id).eq("status", "open").eq("created_by", me.id).order("created_at", { ascending:false }).limit(1).maybeSingle();
+    let kv = null, kvErr = null;
+    try { kv = await readKv(r.original_path); } catch(e){ kvErr = e; console.warn("KV lesen", e); }
+    if (!v){
+      const data = fresh(r, kv);
+      const ins = await sb.from("deliveries").insert({ deal_id:r.id, data }).select("*").single();
+      if (ins.error) throw ins.error; v = ins.data;
+    }
+    Object.assign(D, { deal:r, id:v.id, data:v.data, kv, sig:{}, files:null });
+    if (kv) mergeKv(D.data, kv);
+    $("#kvWarn").hidden = !kvErr; if (kvErr) $("#kvWarn").textContent = "Der Kaufvertrag ließ sich nicht automatisch auslesen. Bitte die Angaben prüfen.";
+    renderDel(); show("#vDel");
+  } catch(e){ $("#listErr").textContent = "Auslieferung konnte nicht starten: " + (e.message || e); $("#listErr").hidden = false; }
+}
+function fresh(r, kv){
+  return { vorgang:r.contract_no, verkaeufer:kv?.verkaeufer || r.seller_name, auslieferer: me.full_name || me.email,
+    kunde:{ name:r.customer_name }, fz:{}, zahlung:{}, checks:{}, pruef:{}, probefahrt:true, kmAus:"", schluessel:2 };
+}
+function mergeKv(d, kv){
+  const fill = (o, src) => Object.entries(src || {}).forEach(([k, v]) => { if (v != null && v !== "" && (o[k] == null || o[k] === "")) o[k] = v; });
+  fill(d.kunde ||= {}, kv.kunde); fill(d.fz ||= {}, kv.fz); d.zahlung ||= {}; fill(d.zahlung, kv.zahlung);
+  if (!d.verkaeufer && kv.verkaeufer) d.verkaeufer = kv.verkaeufer;
+  if (!d.vorgang && kv.vorgang) d.vorgang = kv.vorgang;
+  if (!d._payInit){ d._payInit = true; const w = (kv.zahlung?.weise || "").toLowerCase();
+    if (/finanz/.test(w)) d.zahlung.art = "finanzierung"; else if (/überweis|ueberweis/.test(w)) d.zahlung.art = "ueberweisung";
+    if (kv.zahlung?.inzahlung) d.zahlung.inzahlung = true; }
+}
+const save = () => { clearTimeout(D.saveT); const id = D.id, data = D.data; D.saveT = setTimeout(() => sb.from("deliveries").update({ data }).eq("id", id).then(r => r.error && console.warn("Speichern", r.error)), 800); };
+
+function renderDel(){
+  const d = D.data, fz = d.fz, kd = d.kunde;
+  $("#dNr").textContent = "Vorgang " + (d.vorgang || "");
+  $("#dTitle").innerHTML = esc([fz.hersteller, fz.modell].filter(Boolean).join(" ") || D.deal.vehicle || "Fahrzeug") + ' <span class="acc">an ' + esc(kd.name || D.deal.customer_name) + '</span>';
+  $("#dSub").textContent = "Verkauft von " + (d.verkaeufer || "–") + " · ausgeliefert von " + d.auslieferer;
+  const F = [["Käufer", kd.name], ["Anschrift", [kd.strasse, kd.ort].filter(Boolean).join(", ")], ["Telefon", kd.tel], ["FIN", fz.fin], ["Leistung", fz.kw], ["Erstzulassung", fz.ez],
+    ["km lt. Vertrag", fz.km], ["Farbe", fz.farbe], ["Nächste HU", fz.hu], ["Vorbesitzer", fz.vorbesitzer], ["Unfallfrei", fz.unfallfrei === true ? "ja" : fz.unfallfrei === false ? "nein (" + (fz.vorschaden || "Vorschaden") + ")" : "bitte prüfen"]];
+  $("#facts").innerHTML = F.map(([k, v]) => '<div class="fact"><span>' + k + '</span><b>' + esc(v || "–") + '</b></div>').join("");
+  $("#km").value = d.kmAus || "";
+  $("#payWeise").textContent = d.zahlung.weise ? "lt. Vertrag: " + d.zahlung.weise + (d.zahlung.gesamt ? " · " + d.zahlung.gesamt : "") : "";
+  payUi(); zulUi(); renderChecks();
+  $("#keys").innerHTML = [1,2,3,4].map(n => '<button class="chip" data-n="' + n + '" aria-pressed="' + (d.schluessel === n) + '">' + n + '</button>').join("");
+  $("#keys").querySelectorAll(".chip").forEach(b => b.onclick = () => { d.schluessel = +b.dataset.n; $("#keys").querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", x === b)); save(); });
+  // CarGarantie: Probefahrt, Unfallfreiheit, Prüfpunkte
+  const segRow = (k, lab, val, goodLabel = "ja") => '<div class="pr-row" data-k="' + k + '"><span>' + esc(lab) + '</span><span class="seg"><button data-v="1" aria-pressed="' + (val === true) + '">' + goodLabel + '</button><button class="bad" data-v="0" aria-pressed="' + (val === false) + '">' + (goodLabel === "ja" ? "nein" : "Mangel") + '</button></span></div>';
+  $("#pr").innerHTML = segRow("_probe", "Probefahrt gemacht", d.probefahrt !== false) + segRow("_unfall", "Unfallfrei lt. Vorbesitzer", fz.unfallfrei ?? null)
+    + APDF.PRUEF.map(([k, , good, lab]) => segRow(k, lab, d.pruef[k] !== false, "i. O.")).join("");
+  $("#pr").querySelectorAll(".pr-row").forEach(r => r.querySelectorAll("button").forEach(b => b.onclick = () => {
+    const v = b.dataset.v === "1", k = r.dataset.k;
+    if (k === "_probe") d.probefahrt = v; else if (k === "_unfall") fz.unfallfrei = v; else d.pruef[k] = v;
+    r.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); save(); cgSum();
+  }));
+  $("#sonst").value = d.sonstiges || ""; $("#bem").value = d.bemerkungen || "";
+  sigUi(); cgSum(); progress();
+}
+[["#km", v => D.data.kmAus = v], ["#sonst", v => D.data.sonstiges = v], ["#bem", v => D.data.bemerkungen = v]]
+  .forEach(([q, f]) => $(q).addEventListener("input", e => { f(e.target.value.trim()); save(); progress(); }));
+$("#km").addEventListener("blur", e => { const n = e.target.value.replace(/\D/g, ""); if (n){ e.target.value = D.data.kmAus = Number(n).toLocaleString("de-DE"); save(); } });
+$("#back").onclick = () => { clearTimeout(D.saveT); if (D.id) sb.from("deliveries").update({ data:D.data }).eq("id", D.id); showList(); };
+function cgSum(){
+  const d = D.data, dev = APDF.PRUEF.filter(([k]) => d.pruef[k] === false).map(([, , , l]) => l);
+  if (d.probefahrt === false) dev.unshift("keine Probefahrt");
+  if (d.fz.unfallfrei === false) dev.unshift("nicht unfallfrei"); else if (d.fz.unfallfrei == null) dev.unshift("Unfallfreiheit offen");
+  $("#cgSum").classList.toggle("dev", dev.length > 0);
+  $("#cgSumTx").textContent = dev.length ? "Abweichend: " + dev.join(", ") + ". Alles andere ist in Ordnung angekreuzt."
+    : "Alles in Ordnung: privat genutzt, Kunde kauft privat, Probefahrt gemacht, unfallfrei, alle 27 Prüfpunkte ohne Beanstandung.";
+}
+
+function renderChecks(){
+  const d = D.data;
+  let g = null, h = "";
+  for (const it of items()){
+    if (it.g !== g){ g = it.g; h += '<p class="label group-t">' + g + '</p>'; }
+    const v = d.checks[it.k] || "";
+    h += '<div class="ck ' + v + '" data-k="' + it.k + '"><button class="tap"><span class="box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>' + esc(it.l) + '</button>' + (it.na ? '<button class="na-btn">entfällt</button>' : "") + '</div>';
+  }
+  $("#checks").innerHTML = h;
+  $("#checks").querySelectorAll(".ck").forEach(el => {
+    const k = el.dataset.k, set = v => { d.checks[k] = d.checks[k] === v ? "" : v; el.className = "ck " + d.checks[k]; save(); progress(); };
+    el.querySelector(".tap").onclick = () => set("ok");
+    el.querySelector(".na-btn")?.addEventListener("click", () => set("na"));
+  });
+}
+const pick = (host, opts, cur, on) => { host.innerHTML = opts.map(([k, l]) => '<button class="chip" data-k="' + k + '" aria-pressed="' + (cur === k) + '">' + l + '</button>').join("");
+  host.querySelectorAll(".chip").forEach(b => b.onclick = () => { on(b.dataset.k); save(); progress(); }); };
+function payUi(){
+  const z = D.data.zahlung;
+  pick($("#payArt"), PAY, z.art, k => { z.art = k; payUi(); });
+  $("#inz").setAttribute("aria-pressed", !!z.inzahlung);
+  const fin = z.art === "finanzierung";
+  $("#payChkL").textContent = fin ? "Anzahlung" : z.art ? "Zahlungseingang" : "";
+  const c = $("#payChk");
+  if (!z.art){ c.innerHTML = ""; return; }
+  if (fin){
+    c.innerHTML = '<button class="chip okc" data-v="ok" aria-pressed="' + (z.anzahlungOk === true) + '">✓ Anzahlung eingegangen' + (z.anzahlung ? " (" + esc(z.anzahlung) + ")" : "") + '</button><button class="chip" data-v="keine" aria-pressed="' + (z.anzahlungOk === "keine") + '">Keine Anzahlung vereinbart</button>';
+    c.querySelectorAll(".chip").forEach(b => b.onclick = () => { const v = b.dataset.v === "ok" ? true : "keine"; z.anzahlungOk = z.anzahlungOk === v ? null : v; payUi(); save(); progress(); });
+  } else {
+    c.innerHTML = '<button class="chip okc" aria-pressed="' + !!z.geldeingang + '">✓ Zahlungseingang geprüft' + (z.gesamt ? " (" + esc(z.gesamt) + ")" : "") + '</button>';
+    c.firstChild.onclick = () => { z.geldeingang = !z.geldeingang; payUi(); save(); progress(); };
+  }
+}
+$("#inz").onclick = () => { D.data.zahlung.inzahlung = !D.data.zahlung.inzahlung; payUi(); save(); };
+function zulUi(){ pick($("#zul"), ZUL, D.data.zulassung, k => { D.data.zulassung = k; zulUi(); renderChecks(); }); }
+
+/* ---------- Fortschritt und nächster Schritt ---------- */
+const payOk = () => { const z = D.data.zahlung; return z.art === "finanzierung" ? !!z.anzahlungOk : z.art === "ueberweisung" ? !!z.geldeingang : false; };
+function todo(){
+  const d = D.data, t = [];
+  if (!d.kmAus) t.push(["km-Stand eintragen", "#fKm"]);
+  if (!payOk()) t.push([!d.zahlung.art ? "Zahlungsart wählen" : d.zahlung.art === "finanzierung" ? "Anzahlung prüfen" : "Zahlungseingang prüfen", d.zahlung.art ? "#payChk" : "#payArt"]);
+  if (!d.zulassung) t.push(["Zulassung wählen", "#zul"]);
+  const open = items().filter(it => !d.checks[it.k]);
+  if (open.length) t.push([open.length === 1 ? "1 Punkt der Checkliste offen" : open.length + " Punkte der Checkliste offen", '.ck[data-k="' + open[0].k + '"]']);
+  return t;
+}
+function progress(){
+  const d = D.data, IT = items(), total = 3 + IT.length + 2, t = todo();
+  const openCk = IT.filter(it => !d.checks[it.k]).length;
+  const done = (d.kmAus ? 1 : 0) + (payOk() ? 1 : 0) + (d.zulassung ? 1 : 0) + (IT.length - openCk) + (D.sig.ausl ? 1 : 0) + (D.sig.kunde ? 1 : 0);
+  $("#dockBar").style.width = Math.round(done / total * 100) + "%";
+  $("#ckState").textContent = (IT.length - openCk) + " von " + IT.length;
+  $("#n1").classList.toggle("ok", !!d.kmAus); $("#n2").classList.toggle("ok", payOk());
+  $("#n3").classList.toggle("ok", !openCk && !!d.zulassung); $("#n5").classList.toggle("ok", !!(D.sig.ausl && D.sig.kunde));
+  const go = $("#dockGo");
+  if (t.length){ $("#dockTx").textContent = "Noch offen: " + t.map(x => x[0]).join(" · "); go.textContent = "Zum nächsten Punkt ↓"; go.dataset.mode = "jump"; }
+  else if (!D.sig.ausl){ $("#dockTx").textContent = "Alles abgehakt. Jetzt unterschreibst du."; go.textContent = "Unterschreiben"; go.dataset.mode = "ausl"; }
+  else if (!D.sig.kunde){ $("#dockTx").textContent = "Jetzt unterschreibt der Käufer."; go.textContent = "iPad an den Käufer"; go.dataset.mode = "kunde"; }
+  else { $("#dockTx").textContent = "Fertig. Dokumente erstellen und ablegen."; go.textContent = "Auslieferung abschließen"; go.dataset.mode = "finish"; }
+}
+$("#dockGo").onclick = () => {
+  const m = $("#dockGo").dataset.mode;
+  if (m === "jump"){ const [, q] = todo()[0]; const el = $(q); el?.scrollIntoView({ behavior:"smooth", block:"center" }); const f = el?.closest(".fld") || el; f?.classList.add(f.classList.contains("ck") ? "miss" : "need"); setTimeout(() => f?.classList.remove("miss","need"), 1600); if (q === "#fKm") setTimeout(() => $("#km").focus(), 350); }
+  else if (m === "ausl") openPad("ausl");
+  else if (m === "kunde") handOver();
+  else if (m === "finish") finish();
+};
+
+/* ---------- Unterschriften ---------- */
+function sigUi(){
+  for (const [k, id, name] of [["ausl", "#sigAusl", D.data.auslieferer], ["kunde", "#sigKunde", D.data.kunde.name]]){
+    const s = D.sig[k], el = $(id);
+    el.classList.toggle("done", !!s);
+    el.innerHTML = '<b>' + (k === "ausl" ? "Auslieferer" : "Käufer") + ': ' + esc(name || "") + '</b>' + (s ? '<img alt="" src="' + s.url + '"><span class="muted">' + fmtT(new Date(s.at)) + ' Uhr · tippen zum Wiederholen</span>' : '<span class="muted">Tippen zum Unterschreiben</span>');
+  }
+}
+$("#sigAusl").onclick = () => openPad("ausl");
+$("#sigKunde").onclick = () => { if (!D.sig.ausl) return openPad("ausl"); handOver(); };
+function handOver(){
+  const d = D.data, fz = d.fz;
+  $("#handName").textContent = "an " + (d.kunde.name || "den Käufer");
+  $("#handSum").innerHTML = '<b>' + esc([fz.hersteller, fz.modell].filter(Boolean).join(" ")) + '</b>, FIN ' + esc(fz.fin || "") + '<br>km-Stand bei Übergabe: <b>' + esc(d.kmAus) + ' km</b><br>Schlüssel: <b>' + (d.schluessel || "–") + '</b><br>Ausgeliefert von ' + esc(d.auslieferer);
+  $("#hand").hidden = false; document.body.style.overflow = "hidden";
+}
+$("#handBack").onclick = () => { $("#hand").hidden = true; document.body.style.overflow = ""; };
+$("#handGo").onclick = () => { $("#hand").hidden = true; openPad("kunde"); };
+
+const cv = $("#padCv"), ctx = cv.getContext("2d"); let strokes = [], cur = null, padFor = null;
+const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+function openPad(k){
+  padFor = k; strokes = []; const d = D.data;
+  $("#padRole").textContent = k === "ausl" ? "Auslieferer" : "Käufer";
+  $("#padName").textContent = k === "ausl" ? d.auslieferer : d.kunde.name;
+  $("#padTxt").textContent = k === "ausl"
+    ? "Mit deiner Unterschrift bestätigst du die Angaben in der Auslieferungscheckliste und im CarGarantie-Übergabezertifikat."
+    : "Mit Ihrer Unterschrift bestätigen Sie, das Fahrzeug mit den aufgeführten Unterlagen und Schlüsseln in ordnungsgemäßem Zustand erhalten zu haben, und den im Übergabezertifikat festgestellten Fahrzeugzustand. Sie erhalten eine Kopie beider Dokumente.";
+  $("#pad").hidden = false; document.body.style.overflow = "hidden"; requestAnimationFrame(size); padState();
+}
+function size(){ const r = cv.getBoundingClientRect(); cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); draw(); }
+function draw(){ ctx.clearRect(0, 0, cv.width, cv.height); ctx.strokeStyle = "#14306E"; ctx.lineCap = ctx.lineJoin = "round";
+  for (const s of strokes) for (let i = 1; i < s.length; i++){ const a = s[i-1], b = s[i]; ctx.lineWidth = Math.max(1.6, 2.2 + (b.p - .5) * 3) * dpr; ctx.beginPath(); ctx.moveTo(a.x * cv.width, a.y * cv.height); ctx.lineTo(b.x * cv.width, b.y * cv.height); ctx.stroke(); } }
+const ptOf = e => { const r = cv.getBoundingClientRect(); return { x:(e.clientX - r.left) / r.width, y:(e.clientY - r.top) / r.height, p: e.pointerType === "mouse" ? .5 : (e.pressure || .5), t: Math.round(performance.now()) }; };
+cv.addEventListener("pointerdown", e => { e.preventDefault(); cv.setPointerCapture(e.pointerId); cur = [ptOf(e), ptOf(e)]; strokes.push(cur); draw(); });
+cv.addEventListener("pointermove", e => { if (!cur) return; e.preventDefault(); for (const c of (e.getCoalescedEvents?.() || [e])) cur.push(ptOf(c)); draw(); });
+const end = () => { if (cur){ cur = null; padState(); } };
+cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+addEventListener("resize", () => { if (!$("#pad").hidden) size(); });
+function padState(){ const n = strokes.reduce((a, s) => a + s.length, 0); $("#padOk").disabled = n < 12; $("#padPh").hidden = strokes.length > 0; }
+$("#padClear").onclick = () => { strokes = []; draw(); padState(); };
+$("#padCancel").onclick = () => { $("#pad").hidden = true; document.body.style.overflow = ""; };
+$("#padOk").onclick = async () => {
+  // zuschneiden, transparent, dunkelblau
+  let xs = [], ys = []; strokes.forEach(s => s.forEach(p => { xs.push(p.x * cv.width); ys.push(p.y * cv.height); }));
+  const pad = 12 * dpr, x0 = Math.max(0, Math.min(...xs) - pad), y0 = Math.max(0, Math.min(...ys) - pad), x1 = Math.min(cv.width, Math.max(...xs) + pad), y1 = Math.min(cv.height, Math.max(...ys) + pad);
+  const c = document.createElement("canvas"); c.width = Math.round(x1 - x0); c.height = Math.round(y1 - y0); c.getContext("2d").drawImage(cv, x0, y0, c.width, c.height, 0, 0, c.width, c.height);
+  const url = c.toDataURL("image/png"), png = Uint8Array.from(atob(url.split(",")[1]), ch => ch.charCodeAt(0));
+  const bio = await sha256(new TextEncoder().encode(JSON.stringify(strokes)));
+  D.sig[padFor] = { png, url, at: Date.now(), bio, ua: navigator.userAgent };
+  D.data.sig = D.data.sig || {}; D.data.sig[padFor] = { at: new Date().toISOString(), bio };
+  $("#pad").hidden = true; document.body.style.overflow = ""; sigUi(); save(); progress();
+  if (padFor === "ausl" && !D.sig.kunde) setTimeout(handOver, 350);
+  if (padFor === "kunde") setTimeout(() => $("#dockGo").scrollIntoView?.(), 0);
+};
+
+/* ---------- Abschluss ---------- */
+let assets = null;
+const loadAssets = () => assets ||= Promise.all(["vorlagen/cargarantie-uebergabe.pdf", "vorlagen/logo-doc.png"].map(u => fetch(u).then(r => { if (!r.ok) throw new Error(u + " fehlt"); return r.arrayBuffer(); })));
+function docData(){
+  const d = D.data, now = new Date(D.sig.kunde?.at || Date.now());
+  return { ...d, datum: fmtD(now), uhrzeit: fmtT(now), ort: ORT };
+}
+async function finish(){
+  const b = $("#dockGo"), err = $("#delErr"); b.disabled = true; b.classList.add("busy"); err.hidden = true;
+  try {
+    if (!D.files){
+      const [tpl, logo] = await loadAssets(), dd = docData(), sig = { ...D.sig, at: D.sig.kunde.at };
+      const cert = await APDF.buildCert(PDFLib, tpl, dd, sig), list = await APDF.buildList(PDFLib, logo, dd, sig);
+      D.files = { cert, list, certSha: await sha256(cert), listSha: await sha256(list), dd };
+    }
+    const base = D.deal.id + "/auslieferung/" + D.id, cp = base + "-uebergabezertifikat.pdf", lp = base + "-checkliste.pdf";
+    for (const [p, bytes] of [[cp, D.files.cert], [lp, D.files.list]]){
+      const r = await sb.storage.from("contracts").upload(p, new Blob([bytes], { type:"application/pdf" }), { contentType:"application/pdf", upsert:false });
+      if (r.error && !/exists|duplicate/i.test(r.error.message)) throw r.error;
+    }
+    const data = { ...D.data, datum: D.files.dd.datum, uhrzeit: D.files.dd.uhrzeit };
+    const f = await sb.rpc("finish_delivery", { p_id:D.id, p_data:data, p_cert_path:cp, p_cert_sha:D.files.certSha, p_list_path:lp, p_list_sha:D.files.listSha });
+    if (f.error) throw f.error;
+    showDone({ ...D.deal, delivery_id:D.id, delivered_at:new Date().toISOString(), delivery_by: D.data.auslieferer }, { cert_path:cp, list_path:lp, local:D.files });
+  } catch(e){ err.textContent = "Abschließen hat nicht geklappt (" + (e.message || e) + "). Die Unterschriften bleiben erhalten, bitte noch einmal tippen."; err.hidden = false; }
+  finally { b.disabled = false; b.classList.remove("busy"); }
+}
+async function showDone(r, files){
+  if (!files){ const { data } = await sb.from("deliveries").select("cert_path,list_path,done_at,data").eq("id", r.delivery_id).maybeSingle(); files = data || {}; }
+  $("#doneNr").textContent = "Vorgang " + (r.contract_no || "");
+  $("#doneSub").textContent = r.customer_name + " · " + (r.vehicle || "") + " · ausgeliefert " + (r.delivered_at ? fmtD(new Date(r.delivered_at)) + ", " + fmtT(new Date(r.delivered_at)) + " Uhr" : "") + (r.delivery_by ? " von " + r.delivery_by : "");
+  const docs = [["Übergabezertifikat", "CarGarantie", files.cert_path, files.local?.cert], ["Auslieferungscheckliste", "Autowelt Prusseit", files.list_path, files.local?.list]];
+  $("#docs").innerHTML = docs.map(([t, s, p], i) => '<button class="doc" data-i="' + i + '" ' + (p ? "" : "disabled") + '><span class="ic">PDF</span><span><b>' + t + '</b><small>' + s + (p ? " · antippen zum Öffnen" : " · nicht verfügbar") + '</small></span></button>').join("");
+  $("#docs").querySelectorAll(".doc").forEach(el => el.onclick = async () => {
+    const [, , p, local] = docs[+el.dataset.i];
+    const w = window.open("", "_blank");
+    let url;
+    if (local) url = URL.createObjectURL(new Blob([local], { type:"application/pdf" }));
+    else { const { data } = await sb.storage.from("contracts").createSignedUrl(p, 300); url = data?.signedUrl; }
+    if (w && url) w.location = url; else if (url) location.href = url;
+  });
+  show("#vDone");
+}
+$("#next").onclick = () => { $("#q").value = ""; showList(); };
+
+</script>
+</body>
+</html>

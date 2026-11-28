@@ -479,6 +479,12 @@ body.customer .steps,body.customer .user{visibility:hidden}
 .chk .rules input,.chk .rules select{font:inherit;font-size:14px;padding:7px 10px;border:1px solid var(--line-2);border-radius:var(--r-sm);background:var(--surface);color:var(--ink);min-width:0}
 .chk .rules input[type=checkbox]{width:auto;padding:0}
 .chk .rules ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.ac-list{display:flex;flex-direction:column;gap:6px}
+.ac-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface-2)}
+.ac-row > div{flex:1 1 200px;min-width:0}.ac-row small{display:block;color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.ac-tg{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:15px;min-height:40px;cursor:pointer}
+.ac-tg input{width:22px;height:22px;accent-color:var(--red)}
+#acInv li{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .chk .rules li{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:7px 10px;border:1px solid var(--line);border-radius:var(--r-sm)}
 .chk .rules li span{min-width:0;overflow-wrap:anywhere}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .tag.unklar{background:#3A2E10;color:#F2C462}}
@@ -505,6 +511,7 @@ body.customer .steps,body.customer .user{visibility:hidden}
       <button class="barbtn" id="navHome" hidden>Start</button>
       <button class="barbtn" id="navDash" hidden>Dashboard<span class="bdg" id="navChk" hidden></span></button>
       <button class="barbtn" id="navArch">Archiv</button>
+      <a class="barbtn" id="navDel" href="auslieferung.html" hidden style="text-decoration:none">Auslieferung</a>
       <span class="av-sm" id="userAv" aria-hidden="true"></span><span class="uname"><b id="userName"></b></span>
       <button class="barbtn" id="logout">Abmelden</button>
     </div>
@@ -585,6 +592,20 @@ body.customer .steps,body.customer .user{visibility:hidden}
         <div class="row"><button class="btn small" id="rvTest">Testmail an mich senden</button><span class="hint">Geht nur an deine eigene Adresse, kein Kunde bekommt etwas.</span></div>
         <p class="toast" id="rvMsg" hidden></p>
       </div>
+    </div>
+    <div class="panel chk" id="acBox">
+      <h3>Zugänge: Sign und Auslieferung</h3>
+      <p class="hint" style="margin:0">Pro Person: „Sign“ ist die Vertragsoberfläche, „Auslieferung“ das Auslieferungsportal. Wer nur Auslieferung hat, landet nach der Anmeldung direkt im Portal.</p>
+      <div class="ac-list" id="acList"></div>
+      <details id="acInvBox"><summary>Person ohne Firmenadresse freischalten (z. B. Auslieferungsdienst)</summary>
+        <div class="rules">
+          <div class="row"><input id="acName" placeholder="Vor- und Nachname" style="flex:1 1 180px"><input id="acMail" type="email" placeholder="E-Mail-Adresse" style="flex:2 1 220px"></div>
+          <div class="row"><label><input id="acSign" type="checkbox"> Sign</label><label><input id="acDel" type="checkbox" checked> Auslieferung</label><button class="btn small primary" id="acAdd">Freischalten</button></div>
+          <p class="hint" style="margin:0">Danach registriert sich die Person selbst unter <b>dennisknoepfle1.github.io/prusseit-sign/auslieferung.html</b> („Konto anlegen“) mit genau dieser Adresse.</p>
+          <ul class="wl" id="acInv"></ul>
+          <p class="toast" id="acMsg" hidden></p>
+        </div>
+      </details>
     </div>
     <div class="waiver"><details id="wvBox"><summary>Notfreigabe ohne CarVertical/Carfax</summary>
       <div class="panel" style="margin-top:10px">
@@ -2242,9 +2263,13 @@ async function onSession(session){
   if (REMOTE) return;
   if (!session){ me = null; showAuth(); animate($("#s0")); return; }
   if (me?.id === session.user.id) return;
-  const { data, error } = await sb.from("profiles").select("id,email,full_name,role").eq("id", session.user.id).single();
+  let { data, error } = await sb.from("profiles").select("id,email,full_name,role,can_sign,can_deliver").eq("id", session.user.id).single();
+  if (error && /can_sign|can_deliver|column/i.test(error.message || "")) ({ data, error } = await sb.from("profiles").select("id,email,full_name,role").eq("id", session.user.id).single()); // vor Migration 0014
   if (error || !data){ $("#authErr").textContent = "Profil nicht gefunden. Bitte erneut anmelden."; $("#authErr").hidden = false; await sb.auth.signOut(); return; }
+  // Nur Auslieferung freigeschaltet: direkt ins Auslieferungsportal (can_sign fehlt, solange Migration 0014 nicht live ist → wie bisher)
+  if (data.role !== "admin" && data.can_sign === false){ location.replace("auslieferung.html"); return; }
   me = data;
+  $("#navDel").hidden = !(me.role === "admin" || me.can_deliver);
   document.body.classList.remove("authing"); splashOut();
   $("#userName").textContent = me.full_name || me.email; $("#userAv").textContent = initials(me.full_name || me.email); $("#userBar").hidden = false;
   $("#mVk").value = me.full_name || me.email;
@@ -2770,10 +2795,48 @@ async function showDash(quiet){
   });
   loadChecks().catch(e => console.warn("Prüfung", e));
   loadReviewBox().catch(e => console.warn("Bewertungsmail", e));
+  if (!quiet) loadAccess().catch(e => console.warn("Zugänge", e));
   $("#dashLede").textContent = sold.length + " Verkäufe insgesamt · aktualisiert " + new Intl.DateTimeFormat("de-DE", { timeStyle:"short", timeZone:TZ }).format(now) + " Uhr";
   clearTimeout(dashTimer);
   dashTimer = setTimeout(() => { if (!$("#sD").hidden && !document.hidden) showDash(true); else if (!$("#sD").hidden) dashTimer = setTimeout(() => showDash(true), 5000); }, 30000);
 }
+/* Zugänge je Konto: Sign und/oder Auslieferung (nur Admins) */
+async function loadAccess(){
+  const [pr, inv] = await Promise.all([
+    sb.from("profiles").select("id,email,full_name,role,can_sign,can_deliver").order("full_name"),
+    sb.from("access_invites").select("*").order("created_at", { ascending:false })]);
+  if (pr.error) throw pr.error;
+  const L = $("#acList"); L.innerHTML = "";
+  for (const p of pr.data){
+    const row = document.createElement("div"); row.className = "ac-row";
+    const nm = document.createElement("div"); const b = document.createElement("b"); b.textContent = p.full_name || p.email; const sm = document.createElement("small"); sm.textContent = p.email; nm.append(b, sm);
+    row.appendChild(nm);
+    for (const [k, lab] of [["can_sign","Sign"],["can_deliver","Auslieferung"]]){
+      const l = document.createElement("label"); l.className = "ac-tg"; const c = document.createElement("input"); c.type = "checkbox";
+      c.checked = p.role === "admin" || p[k]; c.disabled = p.role === "admin"; l.append(c, document.createTextNode(" " + lab)); row.appendChild(l);
+      c.onchange = async () => { p[k] = c.checked; const r = await sb.rpc("set_access", { p_user:p.id, p_sign:p.can_sign, p_deliver:p.can_deliver });
+        if (r.error){ c.checked = !c.checked; p[k] = c.checked; acMsg("Hat nicht geklappt: " + r.error.message); } };
+    }
+    L.appendChild(row);
+  }
+  const known = new Set(pr.data.map(p => p.email)), ul = $("#acInv"); ul.innerHTML = "";
+  for (const i of (inv.data || []).filter(i => !known.has(i.email))){
+    const li = document.createElement("li"); const t = document.createElement("span");
+    t.textContent = (i.full_name ? i.full_name + " · " : "") + i.email + " · " + [i.can_sign && "Sign", i.can_deliver && "Auslieferung"].filter(Boolean).join(" + ") + " · noch nicht registriert";
+    const x = document.createElement("button"); x.className = "btn small"; x.textContent = "Entfernen";
+    x.onclick = async () => { await sb.from("access_invites").delete().eq("email", i.email); loadAccess(); };
+    li.append(t, x); ul.appendChild(li);
+  }
+}
+function acMsg(t, ok){ const m = $("#acMsg"); m.hidden = !t; m.className = "toast" + (ok ? "" : " err"); m.textContent = t; $("#acInvBox").open = true; }
+$("#acAdd").addEventListener("click", async () => {
+  const email = $("#acMail").value.trim().toLowerCase(), full_name = $("#acName").value.trim() || null, can_sign = $("#acSign").checked, can_deliver = $("#acDel").checked;
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return acMsg("Bitte eine gültige E-Mail-Adresse eintragen.");
+  if (!can_sign && !can_deliver) return acMsg("Bitte mindestens Sign oder Auslieferung ankreuzen.");
+  const r = await sb.from("access_invites").upsert({ email, full_name, can_sign, can_deliver });
+  if (r.error) return acMsg("Hat nicht geklappt: " + r.error.message);
+  acMsg(email + " ist freigeschaltet und kann sich jetzt registrieren.", true); $("#acMail").value = ""; $("#acName").value = ""; loadAccess();
+});
 /* Notfreigabe ohne CarVertical/Carfax (nur im Admin-Dashboard) */
 async function loadWaivers(){
   const sel = $("#wvSeller"), cur = sel.value;
