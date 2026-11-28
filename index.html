@@ -1031,7 +1031,14 @@ async function readKvData(bytes){
     const mails = items.map(it => (it.s.match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/) || [])[0]).filter(m => m && !own(m));
     if (mails.length) out.mail = mails[0].toLowerCase();
     // Vorgangsnummer: die Nummer mit # auf Seite 1 (z. B. „Schlüssel-Nr.: #96“)
-    const nr = items.filter(it => it.y > H*0.45).map(it => (it.s.match(/(?:^|\s)#\s?(\d{1,10})\b/) || [])[1]).find(Boolean);
+    const hashNr = s => (s.match(/(?:^|[\s:.(])#\s?(\d{1,10})\b/) || [])[1];
+    let nr = items.filter(it => it.y > H*0.45).map(it => hashNr(it.s)).find(Boolean);
+    // Manche PDFs zerlegen „#807“ in einzelne Textstücke: dann zeilenweise zusammensetzen, zur Not ganze Seite 1
+    if (!nr){
+      const rows = []; [...items].sort((a,b) => b.y - a.y || a.x - b.x).forEach(it => { const r = rows.find(r => Math.abs(r.y - it.y) < 2.5); r ? r.its.push(it) : rows.push({ y:it.y, its:[it] }); });
+      const lines = rows.map(r => ({ y:r.y, s:" " + r.its.sort((a,b) => a.x - b.x).map(i => i.s).join("") }));
+      nr = lines.filter(l => l.y > H*0.45).map(l => hashNr(l.s)).find(Boolean) || lines.map(l => hashNr(l.s)).find(Boolean);
+    }
     if (nr) out.vorgang = "#" + nr;
     out.isKv = items.some(it => /^KAUFVERTRAG$/i.test(it.s));
     const kv = items.find(it => /^KAUFVERTRAG$/i.test(it.s));
@@ -1510,7 +1517,12 @@ async function setKv(file, pre){
   const err = $("#loadErr"); err.hidden = true;
   try { S.kv = pre || await readPdf(file); } catch { err.textContent = pdfErr(file.name); err.hidden = false; }
   showDocs();
-  if (S.kv) await readKvData(S.kv.bytes).then(applyKvData).catch(e => console.warn("Auslesen", e));
+  if (S.kv) await readKvData(S.kv.bytes).then(d => {
+    // Nummer nicht im Text gefunden: aus dem Dateinamen nehmen (z. B. „KV #807.pdf“)
+    const fn = (S.kv.name || "").match(/#\s?(\d{1,10})/);
+    if (!d.vorgang && fn) d.vorgang = "#" + fn[1];
+    return applyKvData(d);
+  }).catch(e => console.warn("Auslesen", e));
   showDocs();
   // Bildseiten schon jetzt im Hintergrund lesen, während die Kundendaten eingetragen werden
   if (S.kv){ const bytes = S.kv.bytes, pages = S.kv.pages; const run = detectFields(bytes, pages).then(d => ocrFields(bytes, d.imagePages)); run.catch(() => {}); S.kvOcr = { bytes, run }; }
@@ -1830,6 +1842,7 @@ function preCheck(){
   else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) out.push({ t:"Die E-Mail-Adresse „" + mail + "“ sieht nicht gültig aus." });
   else if (k.mail && k.mail !== mail.toLowerCase()) out.push({ t:"Die E-Mail-Adresse „" + mail + "“ weicht vom Vertrag ab (dort: „" + k.mail + "“)." });
   if (k.kunde && normName(k.kunde) !== normName(S.meta.kunde)) out.push({ t:"Der Kundenname „" + S.meta.kunde + "“ weicht vom Namen auf Seite 1 ab (dort: „" + k.kunde + "“)." });
+  if (!/#?\d/.test(S.meta.vorgang || "")) out.push({ t:"Es ist keine Vorgangsnummer eingetragen. Bitte die #-Nummer aus dem Kaufvertrag oben eintragen." });
   if (k.vorgang && k.vorgang !== S.meta.vorgang) out.push({ t:"Die Vorgangsnummer „" + S.meta.vorgang + "“ weicht vom Vertrag ab (dort: „" + k.vorgang + "“)." });
   if (!S.fields.some(f => isSig(f) && f.role==="kd")) out.push({ t:"Es gibt kein Unterschriftsfeld für den Käufer." });
   if (!S.fields.some(f => isSig(f) && f.role==="vk")) out.push({ t:"Es gibt kein Unterschriftsfeld für den Verkäufer." });
