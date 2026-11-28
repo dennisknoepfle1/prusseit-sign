@@ -170,7 +170,7 @@ begin
     list_path = p_list_path, list_sha256 = p_list_sha, done_at = now() where id = p_id;
   insert into public.audit_events (deal_id, event, details)
     values (v.deal_id, 'delivered', jsonb_build_object('delivery', p_id, 'cert_sha256', p_cert_sha, 'list_sha256', p_list_sha,
-            'km', p_data->>'km', 'by', (select coalesce(full_name, email) from public.profiles where id = auth.uid())));
+            'km', p_data->>'kmAus', 'by', (select coalesce(full_name, email) from public.profiles where id = auth.uid())));
 end $$;
 revoke execute on function public.finish_delivery(uuid, jsonb, text, text, text, text) from public, anon;
 grant execute on function public.finish_delivery(uuid, jsonb, text, text, text, text) to authenticated;
