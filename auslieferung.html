@@ -212,6 +212,14 @@ details.more summary{cursor:pointer;font-weight:600;color:var(--red-ink);min-hei
 .doc .ic{width:46px;height:56px;border-radius:8px;background:var(--red-soft);color:var(--red-ink);display:grid;place-items:center;font-family:var(--f-mono);font-size:12px;font-weight:600;flex:none}
 .doc b{display:block;font-size:17px}
 .doc small{color:var(--muted)}
+.scans{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px}
+.scan{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1.5px dashed var(--line-2);border-radius:var(--r-sm);background:var(--surface-2);min-height:72px}
+.scan.has{border-style:solid;border-color:var(--ok);background:var(--ok-soft)}
+.scan.need{border-color:var(--red);background:var(--red-soft)}
+.scan{flex-wrap:wrap}.scan .thumbs{margin-right:auto}.scan div{flex:1 1 100%;min-width:0}.scan b{display:block}.scan small{color:var(--muted)}
+.scan .thumbs{display:flex;gap:6px}.scan .thumbs img{width:40px;height:52px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+.card.test{border:1.5px dashed var(--warn);background:var(--warn-soft)}
+.toast.busy::after{content:"";display:inline-block;width:12px;height:12px;margin-left:8px;vertical-align:-1px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
 .staff{display:flex;flex-direction:column;gap:8px;margin-top:12px}
 .staff-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm)}
 .staff-row span{flex:1;min-width:0;overflow-wrap:anywhere}
@@ -251,10 +259,11 @@ details.more summary{cursor:pointer;font-weight:600;color:var(--red-ink);min-hei
   <!-- Suche -->
   <section id="vList" hidden>
     <span class="eyebrow">Auslieferung</span>
-    <h1>Welches Auto <span class="acc">lieferst du aus?</span></h1>
+    <h1 id="listH">Welches Auto <span class="acc">lieferst du aus?</span></h1>
+    <div class="chips" id="tabs" style="margin:18px 0 16px"><button class="chip" data-t="open" aria-pressed="true">Auszuliefern</button><button class="chip" data-t="done" aria-pressed="false">Ausgeliefert</button></div>
     <label class="search">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      <input id="q" type="search" placeholder="Kunde, Vorgang (#581) oder Fahrzeug" autocomplete="off" enterkeyhint="search">
+      <input id="q" type="search" placeholder="Kunde, Vorgang (#581), Fahrzeug oder FIN" autocomplete="off" enterkeyhint="search">
     </label>
     <div class="toast err" id="listErr" hidden style="margin-top:14px"></div>
     <div class="list" id="list"></div>
@@ -297,7 +306,9 @@ details.more summary{cursor:pointer;font-weight:600;color:var(--red-ink);min-hei
     <div class="panel">
       <div class="panel-h"><span class="num" id="n3">3</span><h2>Auslieferungscheckliste</h2><span class="state" id="ckState"></span></div>
       <p class="label" style="margin-bottom:10px">Zulassung</p>
-      <div class="chips" id="zul" style="margin-bottom:20px"></div>
+      <div class="chips" id="zul" style="margin-bottom:14px"></div>
+      <div class="scans" id="scans" style="margin-bottom:20px"></div>
+      <input type="file" id="scanIn" accept="image/*,application/pdf" multiple hidden>
       <p class="muted" style="margin-bottom:14px">Tippe jeden Punkt an, wenn er erledigt ist. Was nicht zutrifft, auf „entfällt“ setzen.</p>
       <div class="checks" id="checks"></div>
       <div class="grid" style="margin-top:16px">
@@ -341,7 +352,8 @@ details.more summary{cursor:pointer;font-weight:600;color:var(--red-ink);min-hei
       <p class="muted" id="doneSub"></p>
     </div>
     <div class="docs" id="docs"></div>
-    <div style="margin-top:26px;display:flex;gap:12px;flex-wrap:wrap"><button class="btn primary" id="next">Nächste Auslieferung →</button></div>
+    <div style="margin-top:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><p class="toast" id="mailSt" hidden></p><button class="btn small" id="mailRetry" hidden>Noch mal senden</button></div>
+    <div style="margin-top:26px;display:flex;gap:12px;flex-wrap:wrap"><button class="btn primary" id="next">Nächste Auslieferung →</button><button class="btn ghost" id="doneBack">Zur Liste</button></div>
   </section>
 </main>
 
@@ -454,15 +466,36 @@ sb.auth.onAuthStateChange((_e, s) => setTimeout(() => onSession(s), 0));
 /* ---------- Suche ---------- */
 let qT = null, qN = 0;
 $("#q").addEventListener("input", () => { clearTimeout(qT); qT = setTimeout(search, 250); });
+let TAB = "open";
 async function showList(){ show("#vList"); search(); }
+$("#tabs").querySelectorAll(".chip").forEach(b => b.onclick = () => { TAB = b.dataset.t; $("#tabs").querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", x === b));
+  $("#listH").innerHTML = TAB === "done" ? 'Ausgelieferte <span class="acc">Fahrzeuge</span>' : 'Welches Auto <span class="acc">lieferst du aus?</span>'; search(); });
+/* Archiv: abgeschlossene Auslieferungen (Admins alle, sonst eigene und die eigener Verkäufe) */
+async function searchDone(n, q){
+  const { data, error } = await sb.from("deliveries").select("id,deal_id,done_at,data,cert_path,list_path").eq("status", "done").order("done_at", { ascending:false }).limit(300);
+  if (n !== qN) return;
+  $("#listErr").hidden = !error; if (error){ $("#listErr").textContent = "Archiv lädt gerade nicht: " + error.message; return; }
+  const t = q.toLowerCase().replace("#", ""), rows = data.filter(v => { const d = v.data || {};
+    return !t || [d.kunde?.name, d.vorgang, d.fz?.fin, d.fz?.modell, d.fz?.hersteller, d.auslieferer].join(" ").toLowerCase().replace(/#/g, "").includes(t); });
+  const L = $("#list");
+  if (!rows.length){ L.innerHTML = '<p class="empty">' + (data.length ? "Nichts gefunden." : "Noch keine Auslieferung abgeschlossen.") + '</p>'; return; }
+  L.innerHTML = rows.map((v, i) => { const d = v.data || {};
+    return '<button class="card" data-i="' + i + '" style="animation-delay:' + Math.min(i, 12) * 30 + 'ms"><span class="nr">' + esc(d.vorgang || "") + ' · ausgeliefert ' + fmtD(new Date(v.done_at)) + ', ' + fmtT(new Date(v.done_at)) + ' Uhr</span><b>' + esc(d.kunde?.name || "") + '</b><span class="veh">' + esc([d.fz?.hersteller, d.fz?.modell].filter(Boolean).join(" ")) + (d.fz?.fin ? " · FIN " + esc(d.fz.fin) : "") + '</span><span class="foot"><span class="pill ok">✓ ' + esc(d.auslieferer || "") + '</span><span style="margin-left:auto">' + esc(d.kmAus ? d.kmAus + " km" : "") + '</span></span></button>'; }).join("");
+  L.querySelectorAll(".card").forEach(c => c.onclick = () => { const v = rows[+c.dataset.i], d = v.data || {};
+    showDone({ contract_no:d.vorgang, customer_name:d.kunde?.name || "", vehicle:[d.fz?.hersteller, d.fz?.modell].filter(Boolean).join(" "), delivered_at:v.done_at, delivery_by:d.auslieferer }, v); });
+}
 async function search(){
   const n = ++qN, q = $("#q").value.trim();
+  if (TAB === "done") return searchDone(n, q);
   const { data, error } = await sb.rpc("delivery_search", { q });
   if (n !== qN) return;
   $("#listErr").hidden = !error; if (error){ $("#listErr").textContent = "Suche geht gerade nicht: " + error.message; return; }
   const L = $("#list");
+  // Testfahrzeug: immer oben, speichert nichts, schickt die Dokumente nur an dich selbst
+  if (!q || /test/i.test(q)) data.unshift(TEST_DEAL);
   if (!data.length){ L.innerHTML = '<p class="empty">Kein unterschriebener Vertrag gefunden.</p>'; return; }
   L.innerHTML = data.map((r, i) => {
+    if (r.test) return '<button class="card test" data-i="' + i + '"><span class="nr">TEST · zum Ausprobieren</span><b>Testfahrzeug</b><span class="veh">Max Mustermann · VW Golf VIII. Es wird nichts gespeichert, die Dokumente gehen nur an dich.</span><span class="foot"><span class="pill open">Test</span></span></button>';
     const st = r.delivery_status === "done" ? '<span class="pill ok">✓ ausgeliefert ' + (r.delivered_at ? fmtD(new Date(r.delivered_at)) : "") + '</span>'
       : r.delivery_status === "open" ? '<span class="pill open">in Auslieferung · ' + esc(r.delivery_by || "") + '</span>' : "";
     return '<button class="card" data-i="' + i + '" style="animation-delay:' + Math.min(i, 12) * 30 + 'ms"><span class="nr">' + esc(r.contract_no || "") + ' · unterschrieben ' + (r.signed_at ? fmtD(new Date(r.signed_at)) : "") +
@@ -471,15 +504,17 @@ async function search(){
   L.querySelectorAll(".card").forEach(c => c.onclick = () => openDeal(data[+c.dataset.i]));
 }
 
+const TEST_DEAL = { test:true, id:"test", contract_no:"TEST", vehicle:"VW Golf VIII (Test)", customer_name:"Max Mustermann", seller_name:"Testverkäufer", original_path:"vorlagen/test-kaufvertrag.pdf" };
+
 /* ---------- Kaufvertrag auslesen (Seite 1) ---------- */
 const WMI = { WVW:"VW", WVG:"VW", WV1:"VW", WV2:"VW", WAU:"Audi", WUA:"Audi", TRU:"Audi", WBA:"BMW", WBS:"BMW", WBY:"BMW", WMW:"MINI", WDD:"Mercedes-Benz", WDB:"Mercedes-Benz", W1K:"Mercedes-Benz", W1N:"Mercedes-Benz", W1V:"Mercedes-Benz", WDC:"Mercedes-Benz",
   WF0:"Ford", WF1:"Ford", W0L:"Opel", W0V:"Opel", VSS:"Seat", VSE:"Seat", TMB:"Skoda", VF1:"Renault", VF3:"Peugeot", VF7:"Citroën", VR3:"Peugeot", VR7:"Citroën", VXK:"Opel", ZFA:"Fiat", ZFF:"Ferrari", ZAR:"Alfa Romeo", ZHW:"Lamborghini",
   WP0:"Porsche", WP1:"Porsche", JTD:"Toyota", JTN:"Toyota", JTM:"Toyota", SB1:"Toyota", VNK:"Toyota", NMT:"Toyota", JMZ:"Mazda", JMB:"Mitsubishi", JN1:"Nissan", SJN:"Nissan", VSK:"Nissan", JHM:"Honda", SHH:"Honda", KNA:"Kia", KNE:"Kia", U5Y:"Kia", KMH:"Hyundai", TMA:"Hyundai", NLH:"Hyundai",
   YV1:"Volvo", YV4:"Volvo", LVY:"Volvo", SAL:"Land Rover", SAJ:"Jaguar", VF8:"Smart", WME:"Smart", JSA:"Suzuki", TSM:"Suzuki", UU1:"Dacia", VWV:"VW", LRW:"Tesla", XP7:"Tesla", "5YJ":"Tesla", LSJ:"MG", SAR:"Rover", JF1:"Subaru", ZCF:"Iveco", LJ1:"BYD", LGX:"BYD" };
 async function readKv(path){
-  const { data, error } = await sb.storage.from("contracts").createSignedUrl(path, 300);
-  if (error) throw error;
-  const pdf = await pdfjsLib.getDocument({ url:data.signedUrl, disableAutoFetch:true, disableStream:true }).promise;
+  let url = path;
+  if (!path.startsWith("vorlagen/")){ const { data, error } = await sb.storage.from("contracts").createSignedUrl(path, 300); if (error) throw error; url = data.signedUrl; }
+  const pdf = await pdfjsLib.getDocument({ url, disableAutoFetch:true, disableStream:true }).promise;
   try {
     const page = await pdf.getPage(1), [x0, y0, x1, y1] = page.view, W = x1 - x0, H = y1 - y0;
     const it = (await page.getTextContent()).items.filter(i => i.str && i.str.trim()).map(i => ({ s:i.str.trim(), x:i.transform[4]-x0, y:i.transform[5]-y0 }));
@@ -525,6 +560,13 @@ async function openDeal(r){
   if (r.delivery_status === "done"){ return showDone(r); }
   const card = [...document.querySelectorAll(".card")].find(c => c.querySelector("b")?.textContent === r.customer_name); card?.classList.add("busy");
   try {
+    if (r.test){
+      const kv = await readKv(r.original_path), data = fresh(r, kv);
+      Object.assign(D, { deal:r, id:"test", data, kv, sig:{}, files:null, test:true, scans:{} });
+      mergeKv(D.data, kv); $("#kvWarn").hidden = false; $("#kvWarn").textContent = "Testauslieferung: Es wird nichts gespeichert. Am Ende gehen die beiden Dokumente nur an deine eigene Mailadresse.";
+      renderDel(); show("#vDel"); return;
+    }
+    D.test = false;
     // eigene offene Auslieferung fortsetzen, sonst neu anlegen
     let { data: v } = await sb.from("deliveries").select("*").eq("deal_id", r.id).eq("status", "open").eq("created_by", me.id).order("created_at", { ascending:false }).limit(1).maybeSingle();
     let kv = null, kvErr = null;
@@ -534,7 +576,7 @@ async function openDeal(r){
       const ins = await sb.from("deliveries").insert({ deal_id:r.id, data }).select("*").single();
       if (ins.error) throw ins.error; v = ins.data;
     }
-    Object.assign(D, { deal:r, id:v.id, data:v.data, kv, sig:{}, files:null });
+    Object.assign(D, { deal:r, id:v.id, data:v.data, kv, sig:{}, files:null, scans:{} });
     if (kv) mergeKv(D.data, kv);
     $("#kvWarn").hidden = !kvErr; if (kvErr) $("#kvWarn").textContent = "Der Kaufvertrag ließ sich nicht automatisch auslesen. Bitte die Angaben prüfen.";
     renderDel(); show("#vDel");
@@ -553,7 +595,7 @@ function mergeKv(d, kv){
     if (/finanz/.test(w)) d.zahlung.art = "finanzierung"; else if (/überweis|ueberweis/.test(w)) d.zahlung.art = "ueberweisung";
     if (kv.zahlung?.inzahlung) d.zahlung.inzahlung = true; }
 }
-const save = () => { clearTimeout(D.saveT); const id = D.id, data = D.data; D.saveT = setTimeout(() => sb.from("deliveries").update({ data }).eq("id", id).then(r => r.error && console.warn("Speichern", r.error)), 800); };
+const save = () => { if (D.test) return; clearTimeout(D.saveT); const id = D.id, data = D.data; D.saveT = setTimeout(() => sb.from("deliveries").update({ data }).eq("id", id).then(r => r.error && console.warn("Speichern", r.error)), 800); };
 
 function renderDel(){
   const d = D.data, fz = d.fz, kd = d.kunde;
@@ -583,7 +625,7 @@ function renderDel(){
 [["#km", v => D.data.kmAus = v], ["#sonst", v => D.data.sonstiges = v], ["#bem", v => D.data.bemerkungen = v]]
   .forEach(([q, f]) => $(q).addEventListener("input", e => { f(e.target.value.trim()); save(); progress(); }));
 $("#km").addEventListener("blur", e => { const n = e.target.value.replace(/\D/g, ""); if (n){ e.target.value = D.data.kmAus = Number(n).toLocaleString("de-DE"); save(); } });
-$("#back").onclick = () => { clearTimeout(D.saveT); if (D.id) sb.from("deliveries").update({ data:D.data }).eq("id", D.id); showList(); };
+$("#back").onclick = () => { clearTimeout(D.saveT); if (D.id && !D.test) sb.from("deliveries").update({ data:D.data }).eq("id", D.id); showList(); };
 function cgSum(){
   const d = D.data, dev = APDF.PRUEF.filter(([k]) => d.pruef[k] === false).map(([, , , l]) => l);
   if (d.probefahrt === false) dev.unshift("keine Probefahrt");
@@ -627,7 +669,42 @@ function payUi(){
   }
 }
 $("#inz").onclick = () => { D.data.zahlung.inzahlung = !D.data.zahlung.inzahlung; payUi(); save(); };
-function zulUi(){ pick($("#zul"), ZUL, D.data.zulassung, k => { D.data.zulassung = k; zulUi(); renderChecks(); }); }
+function zulUi(){ pick($("#zul"), ZUL, D.data.zulassung, k => { D.data.zulassung = k; zulUi(); renderChecks(); }); scansUi(); }
+/* Scans: Brief (Pflicht, wenn der Kunde selbst zugelassen hat) und Fahrzeugschein (optional). Bilder werden zu PDF. */
+const SCAN = { brief:"Brief (Zulassungsbescheinigung Teil II)", schein:"Fahrzeugschein (Teil I)" };
+const scanNeeds = () => D.data.zulassung === "brief" ? [["brief", true], ["schein", false]] : D.data.zulassung === "online" ? [["schein", false]] : [];
+let scanFor = null;
+function scansUi(){
+  D.scans ||= {};
+  $("#scans").innerHTML = scanNeeds().map(([k, req]) => { const f = D.scans[k] || [];
+    return '<div class="scan ' + (f.length ? "has" : "") + '" data-k="' + k + '"><div><b>' + SCAN[k] + (req ? " *" : "") + '</b><small>' + (f.length ? f.length + (f.length === 1 ? " Seite" : " Seiten") + " hochgeladen" : req ? "Pflicht: Foto oder PDF" : "optional, falls vorhanden") + '</small></div>'
+      + '<span class="thumbs">' + f.filter(x => x.url).slice(0, 3).map(x => '<img alt="" src="' + x.url + '">').join("") + '</span>'
+      + (f.length ? '<button class="btn small ghost" data-a="del">Entfernen</button>' : "") + '<button class="btn small dark" data-a="add">' + (f.length ? "+ Seite" : "Foto / Datei") + '</button></div>'; }).join("");
+  $("#scans").querySelectorAll(".scan").forEach(el => el.querySelectorAll("button").forEach(b => b.onclick = () => {
+    const k = el.dataset.k; if (b.dataset.a === "del"){ D.scans[k] = []; scansUi(); progress(); return; }
+    scanFor = k; $("#scanIn").value = ""; $("#scanIn").click(); }));
+}
+$("#scanIn").addEventListener("change", async e => {
+  const k = scanFor; if (!k) return;
+  for (const f of e.target.files){
+    const bytes = new Uint8Array(await f.arrayBuffer()), pdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+    (D.scans[k] ||= []).push({ bytes, pdf, url: pdf ? null : URL.createObjectURL(f) });
+  }
+  scansUi(); progress();
+});
+async function scanPdf(list){
+  const { PDFDocument } = PDFLib, out = await PDFDocument.create();
+  for (const it of list){
+    if (it.pdf){ const src = await PDFDocument.load(it.bytes, { ignoreEncryption:true }); (await out.copyPages(src, src.getPageIndices())).forEach(p => out.addPage(p)); continue; }
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = it.url; });
+    const sc = Math.min(1, 2200 / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement("canvas");
+    c.width = Math.round(img.naturalWidth * sc); c.height = Math.round(img.naturalHeight * sc); c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    const jpg = await out.embedJpg(Uint8Array.from(atob(c.toDataURL("image/jpeg", .82).split(",")[1]), ch => ch.charCodeAt(0)));
+    const land = c.width > c.height, W = land ? 841.89 : 595.28, H = land ? 595.28 : 841.89, f = Math.min((W - 40) / c.width, (H - 40) / c.height);
+    const pg = out.addPage([W, H]); pg.drawImage(jpg, { x:(W - c.width * f) / 2, y:(H - c.height * f) / 2, width:c.width * f, height:c.height * f });
+  }
+  return out.save();
+}
 
 /* ---------- Fortschritt und nächster Schritt ---------- */
 const payOk = () => { const z = D.data.zahlung; return z.art === "finanzierung" ? !!z.anzahlungOk : z.art === "ueberweisung" ? !!z.geldeingang : false; };
@@ -636,6 +713,7 @@ function todo(){
   if (!d.kmAus) t.push(["km-Stand eintragen", "#fKm"]);
   if (!payOk()) t.push([!d.zahlung.art ? "Zahlungsart wählen" : d.zahlung.art === "finanzierung" ? "Anzahlung prüfen" : "Zahlungseingang prüfen", d.zahlung.art ? "#payChk" : "#payArt"]);
   if (!d.zulassung) t.push(["Zulassung wählen", "#zul"]);
+  else if (d.zulassung === "brief" && !(D.scans?.brief || []).length) t.push(["Brief-Scan hochladen", '.scan[data-k="brief"]']);
   const open = items().filter(it => !d.checks[it.k]);
   if (open.length) t.push([open.length === 1 ? "1 Punkt der Checkliste offen" : open.length + " Punkte der Checkliste offen", '.ck[data-k="' + open[0].k + '"]']);
   return t;
@@ -647,7 +725,7 @@ function progress(){
   $("#dockBar").style.width = Math.round(done / total * 100) + "%";
   $("#ckState").textContent = (IT.length - openCk) + " von " + IT.length;
   $("#n1").classList.toggle("ok", !!d.kmAus); $("#n2").classList.toggle("ok", payOk());
-  $("#n3").classList.toggle("ok", !openCk && !!d.zulassung); $("#n5").classList.toggle("ok", !!(D.sig.ausl && D.sig.kunde));
+  $("#n3").classList.toggle("ok", !openCk && !!d.zulassung && !(d.zulassung === "brief" && !(D.scans?.brief || []).length)); $("#n5").classList.toggle("ok", !!(D.sig.ausl && D.sig.kunde));
   const go = $("#dockGo");
   if (t.length){ $("#dockTx").textContent = "Noch offen: " + t.map(x => x[0]).join(" · "); go.textContent = "Zum nächsten Punkt ↓"; go.dataset.mode = "jump"; }
   else if (!D.sig.ausl){ $("#dockTx").textContent = "Alles abgehakt. Jetzt unterschreibst du."; go.textContent = "Unterschreiben"; go.dataset.mode = "ausl"; }
@@ -723,7 +801,8 @@ let assets = null;
 const loadAssets = () => assets ||= Promise.all(["vorlagen/cargarantie-uebergabe.pdf", "vorlagen/logo-doc.png"].map(u => fetch(u).then(r => { if (!r.ok) throw new Error(u + " fehlt"); return r.arrayBuffer(); })));
 function docData(){
   const d = D.data, now = new Date(D.sig.kunde?.at || Date.now());
-  return { ...d, datum: fmtD(now), uhrzeit: fmtT(now), ort: ORT };
+  const scanInfo = scanNeeds().filter(([k]) => (D.scans?.[k] || []).length).map(([k]) => (k === "brief" ? "Brief" : "Fahrzeugschein") + "-Scan liegt vor");
+  return { ...d, datum: fmtD(now), uhrzeit: fmtT(now), ort: ORT, scanInfo };
 }
 async function finish(){
   const b = $("#dockGo"), err = $("#delErr"); b.disabled = true; b.classList.add("busy"); err.hidden = true;
@@ -731,25 +810,38 @@ async function finish(){
     if (!D.files){
       const [tpl, logo] = await loadAssets(), dd = docData(), sig = { ...D.sig, at: D.sig.kunde.at };
       const cert = await APDF.buildCert(PDFLib, tpl, dd, sig), list = await APDF.buildList(PDFLib, logo, dd, sig);
-      D.files = { cert, list, certSha: await sha256(cert), listSha: await sha256(list), dd };
+      const scans = {};
+      for (const [k] of scanNeeds()) if ((D.scans?.[k] || []).length) scans[k] = await scanPdf(D.scans[k]);
+      D.files = { cert, list, scans, certSha: await sha256(cert), listSha: await sha256(list), dd };
+    }
+    if (D.test){
+      const r = { ...D.deal, delivered_at:new Date().toISOString(), delivery_by:D.data.auslieferer };
+      showDone(r, { cert_path:"lokal", list_path:"lokal", local:D.files, scans:Object.fromEntries(Object.keys(D.files.scans).map(k => [k, "lokal"])) });
+      mailDocs({ test:true, cert:b64(D.files.cert), list:b64(D.files.list), brief:D.files.scans.brief && b64(D.files.scans.brief), schein:D.files.scans.schein && b64(D.files.scans.schein), vorgang:"TEST", kunde:D.data.kunde.name, fahrzeug:[D.data.fz.hersteller, D.data.fz.modell].filter(Boolean).join(" ") });
+      return;
     }
     const base = D.deal.id + "/auslieferung/" + D.id, cp = base + "-uebergabezertifikat.pdf", lp = base + "-checkliste.pdf";
-    for (const [p, bytes] of [[cp, D.files.cert], [lp, D.files.list]]){
+    const scanPaths = Object.fromEntries(Object.keys(D.files.scans).map(k => [k, base + (k === "brief" ? "-brief.pdf" : "-fahrzeugschein.pdf")]));
+    for (const [p, bytes] of [[cp, D.files.cert], [lp, D.files.list], ...Object.entries(scanPaths).map(([k, p]) => [p, D.files.scans[k]])]){
       const r = await sb.storage.from("contracts").upload(p, new Blob([bytes], { type:"application/pdf" }), { contentType:"application/pdf", upsert:false });
       if (r.error && !/exists|duplicate/i.test(r.error.message)) throw r.error;
     }
-    const data = { ...D.data, datum: D.files.dd.datum, uhrzeit: D.files.dd.uhrzeit };
+    const data = { ...D.data, datum: D.files.dd.datum, uhrzeit: D.files.dd.uhrzeit, scans: scanPaths };
     const f = await sb.rpc("finish_delivery", { p_id:D.id, p_data:data, p_cert_path:cp, p_cert_sha:D.files.certSha, p_list_path:lp, p_list_sha:D.files.listSha });
     if (f.error) throw f.error;
-    showDone({ ...D.deal, delivery_id:D.id, delivered_at:new Date().toISOString(), delivery_by: D.data.auslieferer }, { cert_path:cp, list_path:lp, local:D.files });
+    showDone({ ...D.deal, delivery_id:D.id, delivered_at:new Date().toISOString(), delivery_by: D.data.auslieferer }, { cert_path:cp, list_path:lp, local:D.files, scans:scanPaths });
+    mailDocs({ delivery_id:D.id });
   } catch(e){ err.textContent = "Abschließen hat nicht geklappt (" + (e.message || e) + "). Die Unterschriften bleiben erhalten, bitte noch einmal tippen."; err.hidden = false; }
   finally { b.disabled = false; b.classList.remove("busy"); }
 }
 async function showDone(r, files){
+  $("#mailSt").hidden = true; $("#mailRetry").hidden = true;
   if (!files){ const { data } = await sb.from("deliveries").select("cert_path,list_path,done_at,data").eq("id", r.delivery_id).maybeSingle(); files = data || {}; }
   $("#doneNr").textContent = "Vorgang " + (r.contract_no || "");
   $("#doneSub").textContent = r.customer_name + " · " + (r.vehicle || "") + " · ausgeliefert " + (r.delivered_at ? fmtD(new Date(r.delivered_at)) + ", " + fmtT(new Date(r.delivered_at)) + " Uhr" : "") + (r.delivery_by ? " von " + r.delivery_by : "");
-  const docs = [["Übergabezertifikat", "CarGarantie", files.cert_path, files.local?.cert], ["Auslieferungscheckliste", "Autowelt Prusseit", files.list_path, files.local?.list]];
+  const sc = files.scans || files.data?.scans || {};
+  const docs = [["Übergabezertifikat", "CarGarantie", files.cert_path, files.local?.cert], ["Auslieferungscheckliste", "Autowelt Prusseit", files.list_path, files.local?.list],
+    ...(sc.brief ? [["Brief", "Scan", sc.brief, files.local?.scans?.brief]] : []), ...(sc.schein ? [["Fahrzeugschein", "Scan", sc.schein, files.local?.scans?.schein]] : [])];
   $("#docs").innerHTML = docs.map(([t, s, p], i) => '<button class="doc" data-i="' + i + '" ' + (p ? "" : "disabled") + '><span class="ic">PDF</span><span><b>' + t + '</b><small>' + s + (p ? " · antippen zum Öffnen" : " · nicht verfügbar") + '</small></span></button>').join("");
   $("#docs").querySelectorAll(".doc").forEach(el => el.onclick = async () => {
     const [, , p, local] = docs[+el.dataset.i];
@@ -761,7 +853,21 @@ async function showDone(r, files){
   });
   show("#vDone");
 }
+const b64 = u => { let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
+/* Beide Dokumente per Mail an die ausliefernde Person (der Kunde bekommt nichts) */
+async function mailDocs(body){
+  const m = $("#mailSt"); m.hidden = false; m.className = "toast busy"; m.textContent = "Dokumente werden an dich gemailt …"; $("#mailRetry").hidden = true;
+  try {
+    const r = await sb.functions.invoke("send-delivery", { body });
+    if (r.error || r.data?.error) throw new Error(r.data?.error || r.error.message);
+    m.className = "toast"; m.textContent = "✓ Die Dokumente sind per Mail an " + r.data.to + " unterwegs.";
+  } catch(e){
+    m.className = "toast err"; m.textContent = "Mail konnte nicht verschickt werden (" + (e.message || e) + "). Die Dokumente sind trotzdem gespeichert.";
+    $("#mailRetry").hidden = false; $("#mailRetry").onclick = () => mailDocs(body);
+  }
+}
 $("#next").onclick = () => { $("#q").value = ""; showList(); };
+$("#doneBack").onclick = () => showList();
 
 </script>
 </body>
