@@ -46,7 +46,7 @@
       ["garantie", "Garantieunterlagen aller Anbieter erhalten und erklärt"],
       ["papiere", "Fahrzeugpapiere erhalten"],
       ["kopieschein", "Kopie des Fahrzeugscheins mit aktueller Zulassung abgelegt"],
-      ["brief", "Bei Finanzierung: Brief vorhanden mit korrektem Haltereintrag", true],
+      ["brief", "Brief im Original vom Kunden erhalten, Haltereintrag korrekt"],
       ["ausgangscheck", "Ausgangscheck erhalten, gelesen und zur Kenntnis genommen"],
       ["agb", "AGB erhalten und akzeptiert"],
     ]],
@@ -63,11 +63,13 @@
       ["funktion", "Funktionen des Fahrzeugs erklärt"],
       ["zustand", "Fahrzeug in ordnungsgemäßem Zustand übergeben"],
       ["deutsch", "Kunde verfügt über ausreichende Deutschkenntnisse"],
-      ["geschenk", "Geschenk übergeben", true],
       ["bild", "Übergabefoto gemacht", true],
     ]],
   ];
-  const PAY = [["ueberweisung", "Überweisung"], ["bar", "Bar"], ["ec", "EC-Karte"], ["inzahlung", "Inzahlungnahme"], ["finanzierung", "Finanzierung"]];
+  const PAY = [["ueberweisung", "Überweisung"], ["finanzierung", "Finanzierung"]];
+  const ZUL = [["online", "Online über uns zugelassen"], ["brief", "Kunde bringt Brief mit"]];
+  /* Punkt „brief“ gibt es nur, wenn der Kunde den Brief mitbringt */
+  const itemsFor = d => LIST.map(([g, its]) => [g, its.filter(([k]) => k !== "brief" || d.zulassung === "brief")]);
 
   const fmtDate = d => new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Berlin" }).format(d);
   const fmtTime = d => new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" }).format(d);
@@ -113,7 +115,6 @@
     txt(kd.tel, 130, 273.1, 170);
 
     // Fahrzeug
-    txt(fz.kennzeichen, 130, 313.9, 170);
     txt([fz.hersteller, fz.modell].filter(Boolean).join(" "), 130, 329.5, 170);
     txt(fz.fin, 130, 345.2, 170);
     txt(fz.ccm, 80, 360.9, 68);
@@ -138,7 +139,6 @@
 
     // Übergabe
     txt([d.ort, d.datum].filter(Boolean).join(", "), 160, 789.4, 140);
-    txt(d.cgNr, 420, 789.4, 125);
     await drawSig(doc, pg, sig?.ausl, 140, H - 816, 160, 22);
     await drawSig(doc, pg, sig?.kunde, 385, H - 816, 160, 22);
     const note = "Elektronisch unterschrieben" + (sig?.at ? " am " + d.datum + ", " + fmtTime(new Date(sig.at)) + " Uhr" : "") + " · Prusseit Sign · Vorgang " + (d.vorgang || "");
@@ -188,7 +188,7 @@
     };
     const mid = L + (Rt - L) / 2 + 8;
     const y1 = box(L, mid - L - 16, "Fahrzeug", [
-      ["Fahrzeug", [fz.hersteller, fz.modell].filter(Boolean).join(" ")], ["FIN", fz.fin], ["Kennzeichen", fz.kennzeichen],
+      ["Fahrzeug", [fz.hersteller, fz.modell].filter(Boolean).join(" ")], ["FIN", fz.fin], ["Zulassung", (ZUL.find(([k]) => k === d.zulassung) || [, ""])[1]],
       ["Erstzulassung", fz.ez], ["km bei Auslief.", d.kmAus ? d.kmAus + " km" : ""]]);
     const y2 = box(mid, Rt - mid, "Käufer", [
       ["Name", kd.name], ["Anschrift", [kd.strasse, kd.ort].filter(Boolean).join(", ")], ["Telefon", kd.tel],
@@ -203,10 +203,14 @@
     t("Gesamtbetrag", mid, y, { size: 8, c: mut }); t(z.gesamt || "–", mid + 78, y, { size: 9.5, b: true });
     y -= 17;
     let px = L;
-    for (const [k, lab] of PAY) { tick(px, y - 1.5, !!(z.arten || {})[k]); t(lab, px + 15, y, { size: 9 }); px += R.widthOfTextAtSize(lab, 9) + 32; }
+    for (const [k, lab] of [...PAY, ["inzahlung", "mit Inzahlungnahme"]]) { const on = k === "inzahlung" ? !!z.inzahlung : z.art === k;
+      tick(px, y - 1.5, on); t(lab, px + 15, y, { size: 9 }); px += R.widthOfTextAtSize(lab, 9) + 32; }
     y -= 17;
-    tick(L, y - 1.5, !!z.geldeingang); t("Geldeingang geprüft", L + 15, y, { size: 9, b: true });
-    if (z.notiz) t(z.notiz, mid, y, { size: 9, c: mut, max: Rt - mid });
+    if (z.art === "finanzierung") {
+      const keine = z.anzahlungOk === "keine";
+      tick(L, y - 1.5, z.anzahlungOk === true, keine);
+      t(keine ? "Keine Anzahlung vereinbart" : "Anzahlung eingegangen" + (z.anzahlung ? " (" + z.anzahlung + ")" : ""), L + 15, y, { size: 9, b: true });
+    } else { tick(L, y - 1.5, !!z.geldeingang); t("Zahlungseingang geprüft", L + 15, y, { size: 9, b: true }); }
     y -= 12; hl(y);
 
     function tick(x, yb, on, na) {
@@ -218,9 +222,9 @@
 
     // Checkliste in zwei Spalten
     y -= 18;
-    const ck = d.checks || {};
+    const ck = d.checks || {}, LST = itemsFor(d);
     const colW = (Rt - L - 24) / 2;
-    const cols = [[LIST[0]], [LIST[1], LIST[2]]];
+    const cols = [[LST[0]], [LST[1], LST[2]]];
     let yEnd = y;
     cols.forEach((groups, ci) => {
       let yy = y; const x = L + ci * (colW + 24);
@@ -275,6 +279,6 @@
     if (cur) out.push(cur); return out;
   }
 
-  root.APDF = { PRUEF, LIST, PAY, buildCert, buildList, fmtDate, fmtTime };
+  root.APDF = { PRUEF, LIST, PAY, ZUL, itemsFor, buildCert, buildList, fmtDate, fmtTime };
   if (typeof module !== "undefined") module.exports = root.APDF;
 })(typeof window !== "undefined" ? window : globalThis);

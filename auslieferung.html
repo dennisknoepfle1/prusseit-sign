@@ -282,20 +282,22 @@ details.more summary{cursor:pointer;font-weight:600;color:var(--red-ink);min-hei
       <div class="facts" id="facts"></div>
       <div class="grid" style="margin-top:18px">
         <label class="fld" id="fKm"><span class="label">km-Stand bei Auslieferung *</span><input id="km" inputmode="numeric" placeholder="z. B. 85.702"></label>
-        <label class="fld"><span class="label">Kennzeichen</span><input id="kennz" autocapitalize="characters" placeholder="falls schon zugelassen"></label>
-        <label class="fld"><span class="label">Car-Garantie-Nummer</span><input id="cgNr" placeholder="falls vorhanden"></label>
       </div>
     </div>
 
     <div class="panel">
       <div class="panel-h"><span class="num" id="n2">2</span><h2>Zahlung</h2><span class="state" id="payWeise"></span></div>
       <p class="label" style="margin-bottom:10px">Wie wurde bezahlt?</p>
-      <div class="chips" id="payArten"></div>
-      <div class="chips" style="margin-top:16px"><button class="chip okc" id="geld" aria-pressed="false">✓ Geldeingang geprüft</button></div>
+      <div class="chips" id="payArt"></div>
+      <div class="chips" style="margin-top:12px"><button class="chip" id="inz" aria-pressed="false">+ mit Inzahlungnahme</button></div>
+      <p class="label" style="margin:18px 0 10px" id="payChkL"></p>
+      <div class="chips" id="payChk"></div>
     </div>
 
     <div class="panel">
       <div class="panel-h"><span class="num" id="n3">3</span><h2>Auslieferungscheckliste</h2><span class="state" id="ckState"></span></div>
+      <p class="label" style="margin-bottom:10px">Zulassung</p>
+      <div class="chips" id="zul" style="margin-bottom:20px"></div>
       <p class="muted" style="margin-bottom:14px">Tippe jeden Punkt an, wenn er erledigt ist. Was nicht zutrifft, auf „entfällt“ setzen.</p>
       <div class="checks" id="checks"></div>
       <div class="grid" style="margin-top:16px">
@@ -507,12 +509,17 @@ async function readKv(path){
     out.vorgang = (it.find(i => /^#\d+$/.test(i.s)) || {}).s || null;
     out.zahlung.weise = row(null, /^Zahlungsweise:?$/);
     out.zahlung.gesamt = row(null, /^Gesamtbetrag:?$/);
+    const anz = it.find(i => /Anzahlung/i.test(i.s) && /\d/.test(i.s));
+    out.zahlung.anzahlung = anz ? ((anz.s.match(/([\d.]+,(?:\d{2}|-))\s*(€|EUR)?/) || [])[0] || "").trim() || null : null;
+    if (out.zahlung.anzahlung && !/€|EUR/.test(out.zahlung.anzahlung)) out.zahlung.anzahlung += " €";
+    out.zahlung.inzahlung = it.some(i => /inzahlung/i.test(i.s));
     return out;
   } finally { pdf.destroy(); }
 }
 
 /* ---------- Auslieferung öffnen ---------- */
-const PAY = APDF.PAY, ITEMS = APDF.LIST.flatMap(([g, its]) => its.map(([k, l, na]) => ({ k, l, na, g })));
+const PAY = APDF.PAY, ZUL = APDF.ZUL;
+const items = () => APDF.itemsFor(D.data).flatMap(([g, its]) => its.map(([k, l, na]) => ({ k, l, na, g })));
 async function openDeal(r){
   $("#listErr").hidden = true;
   if (r.delivery_status === "done"){ return showDone(r); }
@@ -535,17 +542,16 @@ async function openDeal(r){
 }
 function fresh(r, kv){
   return { vorgang:r.contract_no, verkaeufer:kv?.verkaeufer || r.seller_name, auslieferer: me.full_name || me.email,
-    kunde:{ name:r.customer_name }, fz:{}, zahlung:{ arten:{} }, checks:{}, pruef:{}, probefahrt:true, kmAus:"", schluessel:2 };
+    kunde:{ name:r.customer_name }, fz:{}, zahlung:{}, checks:{}, pruef:{}, probefahrt:true, kmAus:"", schluessel:2 };
 }
 function mergeKv(d, kv){
   const fill = (o, src) => Object.entries(src || {}).forEach(([k, v]) => { if (v != null && v !== "" && (o[k] == null || o[k] === "")) o[k] = v; });
-  fill(d.kunde ||= {}, kv.kunde); fill(d.fz ||= {}, kv.fz); d.zahlung ||= { arten:{} }; fill(d.zahlung, kv.zahlung);
+  fill(d.kunde ||= {}, kv.kunde); fill(d.fz ||= {}, kv.fz); d.zahlung ||= {}; fill(d.zahlung, kv.zahlung);
   if (!d.verkaeufer && kv.verkaeufer) d.verkaeufer = kv.verkaeufer;
   if (!d.vorgang && kv.vorgang) d.vorgang = kv.vorgang;
   if (!d._payInit){ d._payInit = true; const w = (kv.zahlung?.weise || "").toLowerCase();
-    if (/finanz/.test(w)){ d.zahlung.arten.finanzierung = true; if (/teil/.test(w)) d.zahlung.arten.ueberweisung = true; }
-    else if (/bar/.test(w)) d.zahlung.arten.bar = true; else if (/überweis|ueberweis/.test(w)) d.zahlung.arten.ueberweisung = true;
-    if (!/finanz/.test(w)) d.checks.brief ||= "na"; }
+    if (/finanz/.test(w)) d.zahlung.art = "finanzierung"; else if (/überweis|ueberweis/.test(w)) d.zahlung.art = "ueberweisung";
+    if (kv.zahlung?.inzahlung) d.zahlung.inzahlung = true; }
 }
 const save = () => { clearTimeout(D.saveT); const id = D.id, data = D.data; D.saveT = setTimeout(() => sb.from("deliveries").update({ data }).eq("id", id).then(r => r.error && console.warn("Speichern", r.error)), 800); };
 
@@ -557,23 +563,9 @@ function renderDel(){
   const F = [["Käufer", kd.name], ["Anschrift", [kd.strasse, kd.ort].filter(Boolean).join(", ")], ["Telefon", kd.tel], ["FIN", fz.fin], ["Leistung", fz.kw], ["Erstzulassung", fz.ez],
     ["km lt. Vertrag", fz.km], ["Farbe", fz.farbe], ["Nächste HU", fz.hu], ["Vorbesitzer", fz.vorbesitzer], ["Unfallfrei", fz.unfallfrei === true ? "ja" : fz.unfallfrei === false ? "nein (" + (fz.vorschaden || "Vorschaden") + ")" : "bitte prüfen"]];
   $("#facts").innerHTML = F.map(([k, v]) => '<div class="fact"><span>' + k + '</span><b>' + esc(v || "–") + '</b></div>').join("");
-  $("#km").value = d.kmAus || ""; $("#kennz").value = fz.kennzeichen || ""; $("#cgNr").value = d.cgNr || "";
+  $("#km").value = d.kmAus || "";
   $("#payWeise").textContent = d.zahlung.weise ? "lt. Vertrag: " + d.zahlung.weise + (d.zahlung.gesamt ? " · " + d.zahlung.gesamt : "") : "";
-  $("#payArten").innerHTML = PAY.map(([k, l]) => '<button class="chip" data-k="' + k + '" aria-pressed="' + !!d.zahlung.arten[k] + '">' + l + '</button>').join("");
-  $("#payArten").querySelectorAll(".chip").forEach(b => b.onclick = () => { const on = b.getAttribute("aria-pressed") !== "true"; b.setAttribute("aria-pressed", on); d.zahlung.arten[b.dataset.k] = on; save(); progress(); });
-  $("#geld").setAttribute("aria-pressed", !!d.zahlung.geldeingang);
-  let g = null, h = "";
-  for (const it of ITEMS){
-    if (it.g !== g){ g = it.g; h += '<p class="label group-t">' + g + '</p>'; }
-    const v = d.checks[it.k] || "";
-    h += '<div class="ck ' + v + '" data-k="' + it.k + '"><button class="tap"><span class="box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>' + esc(it.l) + '</button>' + (it.na ? '<button class="na-btn">entfällt</button>' : "") + '</div>';
-  }
-  $("#checks").innerHTML = h;
-  $("#checks").querySelectorAll(".ck").forEach(el => {
-    const k = el.dataset.k, set = v => { d.checks[k] = d.checks[k] === v ? "" : v; el.className = "ck " + d.checks[k]; save(); progress(); };
-    el.querySelector(".tap").onclick = () => set("ok");
-    el.querySelector(".na-btn")?.addEventListener("click", () => set("na"));
-  });
+  payUi(); zulUi(); renderChecks();
   $("#keys").innerHTML = [1,2,3,4].map(n => '<button class="chip" data-n="' + n + '" aria-pressed="' + (d.schluessel === n) + '">' + n + '</button>').join("");
   $("#keys").querySelectorAll(".chip").forEach(b => b.onclick = () => { d.schluessel = +b.dataset.n; $("#keys").querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", x === b)); save(); });
   // CarGarantie: Probefahrt, Unfallfreiheit, Prüfpunkte
@@ -588,10 +580,9 @@ function renderDel(){
   $("#sonst").value = d.sonstiges || ""; $("#bem").value = d.bemerkungen || "";
   sigUi(); cgSum(); progress();
 }
-[["#km", v => D.data.kmAus = v], ["#kennz", v => D.data.fz.kennzeichen = v.toUpperCase()], ["#cgNr", v => D.data.cgNr = v], ["#sonst", v => D.data.sonstiges = v], ["#bem", v => D.data.bemerkungen = v]]
+[["#km", v => D.data.kmAus = v], ["#sonst", v => D.data.sonstiges = v], ["#bem", v => D.data.bemerkungen = v]]
   .forEach(([q, f]) => $(q).addEventListener("input", e => { f(e.target.value.trim()); save(); progress(); }));
 $("#km").addEventListener("blur", e => { const n = e.target.value.replace(/\D/g, ""); if (n){ e.target.value = D.data.kmAus = Number(n).toLocaleString("de-DE"); save(); } });
-$("#geld").onclick = () => { const on = $("#geld").getAttribute("aria-pressed") !== "true"; $("#geld").setAttribute("aria-pressed", on); D.data.zahlung.geldeingang = on; save(); progress(); };
 $("#back").onclick = () => { clearTimeout(D.saveT); if (D.id) sb.from("deliveries").update({ data:D.data }).eq("id", D.id); showList(); };
 function cgSum(){
   const d = D.data, dev = APDF.PRUEF.filter(([k]) => d.pruef[k] === false).map(([, , , l]) => l);
@@ -602,24 +593,61 @@ function cgSum(){
     : "Alles in Ordnung: privat genutzt, Kunde kauft privat, Probefahrt gemacht, unfallfrei, alle 27 Prüfpunkte ohne Beanstandung.";
 }
 
+function renderChecks(){
+  const d = D.data;
+  let g = null, h = "";
+  for (const it of items()){
+    if (it.g !== g){ g = it.g; h += '<p class="label group-t">' + g + '</p>'; }
+    const v = d.checks[it.k] || "";
+    h += '<div class="ck ' + v + '" data-k="' + it.k + '"><button class="tap"><span class="box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>' + esc(it.l) + '</button>' + (it.na ? '<button class="na-btn">entfällt</button>' : "") + '</div>';
+  }
+  $("#checks").innerHTML = h;
+  $("#checks").querySelectorAll(".ck").forEach(el => {
+    const k = el.dataset.k, set = v => { d.checks[k] = d.checks[k] === v ? "" : v; el.className = "ck " + d.checks[k]; save(); progress(); };
+    el.querySelector(".tap").onclick = () => set("ok");
+    el.querySelector(".na-btn")?.addEventListener("click", () => set("na"));
+  });
+}
+const pick = (host, opts, cur, on) => { host.innerHTML = opts.map(([k, l]) => '<button class="chip" data-k="' + k + '" aria-pressed="' + (cur === k) + '">' + l + '</button>').join("");
+  host.querySelectorAll(".chip").forEach(b => b.onclick = () => { on(b.dataset.k); save(); progress(); }); };
+function payUi(){
+  const z = D.data.zahlung;
+  pick($("#payArt"), PAY, z.art, k => { z.art = k; payUi(); });
+  $("#inz").setAttribute("aria-pressed", !!z.inzahlung);
+  const fin = z.art === "finanzierung";
+  $("#payChkL").textContent = fin ? "Anzahlung" : z.art ? "Zahlungseingang" : "";
+  const c = $("#payChk");
+  if (!z.art){ c.innerHTML = ""; return; }
+  if (fin){
+    c.innerHTML = '<button class="chip okc" data-v="ok" aria-pressed="' + (z.anzahlungOk === true) + '">✓ Anzahlung eingegangen' + (z.anzahlung ? " (" + esc(z.anzahlung) + ")" : "") + '</button><button class="chip" data-v="keine" aria-pressed="' + (z.anzahlungOk === "keine") + '">Keine Anzahlung vereinbart</button>';
+    c.querySelectorAll(".chip").forEach(b => b.onclick = () => { const v = b.dataset.v === "ok" ? true : "keine"; z.anzahlungOk = z.anzahlungOk === v ? null : v; payUi(); save(); progress(); });
+  } else {
+    c.innerHTML = '<button class="chip okc" aria-pressed="' + !!z.geldeingang + '">✓ Zahlungseingang geprüft' + (z.gesamt ? " (" + esc(z.gesamt) + ")" : "") + '</button>';
+    c.firstChild.onclick = () => { z.geldeingang = !z.geldeingang; payUi(); save(); progress(); };
+  }
+}
+$("#inz").onclick = () => { D.data.zahlung.inzahlung = !D.data.zahlung.inzahlung; payUi(); save(); };
+function zulUi(){ pick($("#zul"), ZUL, D.data.zulassung, k => { D.data.zulassung = k; zulUi(); renderChecks(); }); }
+
 /* ---------- Fortschritt und nächster Schritt ---------- */
+const payOk = () => { const z = D.data.zahlung; return z.art === "finanzierung" ? !!z.anzahlungOk : z.art === "ueberweisung" ? !!z.geldeingang : false; };
 function todo(){
   const d = D.data, t = [];
   if (!d.kmAus) t.push(["km-Stand eintragen", "#fKm"]);
-  if (!PAY.some(([k]) => d.zahlung.arten[k])) t.push(["Zahlungsart wählen", "#payArten"]);
-  if (!d.zahlung.geldeingang) t.push(["Geldeingang prüfen", "#geld"]);
-  const open = ITEMS.filter(it => !d.checks[it.k]);
+  if (!payOk()) t.push([!d.zahlung.art ? "Zahlungsart wählen" : d.zahlung.art === "finanzierung" ? "Anzahlung prüfen" : "Zahlungseingang prüfen", d.zahlung.art ? "#payChk" : "#payArt"]);
+  if (!d.zulassung) t.push(["Zulassung wählen", "#zul"]);
+  const open = items().filter(it => !d.checks[it.k]);
   if (open.length) t.push([open.length === 1 ? "1 Punkt der Checkliste offen" : open.length + " Punkte der Checkliste offen", '.ck[data-k="' + open[0].k + '"]']);
   return t;
 }
 function progress(){
-  const d = D.data, total = 3 + ITEMS.length + 2, t = todo();
-  const openCk = ITEMS.filter(it => !d.checks[it.k]).length;
-  const done = (d.kmAus ? 1 : 0) + (PAY.some(([k]) => d.zahlung.arten[k]) ? 1 : 0) + (d.zahlung.geldeingang ? 1 : 0) + (ITEMS.length - openCk) + (D.sig.ausl ? 1 : 0) + (D.sig.kunde ? 1 : 0);
+  const d = D.data, IT = items(), total = 3 + IT.length + 2, t = todo();
+  const openCk = IT.filter(it => !d.checks[it.k]).length;
+  const done = (d.kmAus ? 1 : 0) + (payOk() ? 1 : 0) + (d.zulassung ? 1 : 0) + (IT.length - openCk) + (D.sig.ausl ? 1 : 0) + (D.sig.kunde ? 1 : 0);
   $("#dockBar").style.width = Math.round(done / total * 100) + "%";
-  $("#ckState").textContent = (ITEMS.length - openCk) + " von " + ITEMS.length;
-  $("#n1").classList.toggle("ok", !!d.kmAus); $("#n2").classList.toggle("ok", !t.some(x => /Zahlung|Geld/.test(x[0])));
-  $("#n3").classList.toggle("ok", !openCk); $("#n5").classList.toggle("ok", !!(D.sig.ausl && D.sig.kunde));
+  $("#ckState").textContent = (IT.length - openCk) + " von " + IT.length;
+  $("#n1").classList.toggle("ok", !!d.kmAus); $("#n2").classList.toggle("ok", payOk());
+  $("#n3").classList.toggle("ok", !openCk && !!d.zulassung); $("#n5").classList.toggle("ok", !!(D.sig.ausl && D.sig.kunde));
   const go = $("#dockGo");
   if (t.length){ $("#dockTx").textContent = "Noch offen: " + t.map(x => x[0]).join(" · "); go.textContent = "Zum nächsten Punkt ↓"; go.dataset.mode = "jump"; }
   else if (!D.sig.ausl){ $("#dockTx").textContent = "Alles abgehakt. Jetzt unterschreibst du."; go.textContent = "Unterschreiben"; go.dataset.mode = "ausl"; }
