@@ -212,6 +212,8 @@ details.more summary{cursor:pointer;font-weight:600;color:var(--red-ink);min-hei
 .doc .ic{width:46px;height:56px;border-radius:8px;background:var(--red-soft);color:var(--red-ink);display:grid;place-items:center;font-family:var(--f-mono);font-size:12px;font-weight:600;flex:none}
 .doc b{display:block;font-size:17px}
 .doc small{color:var(--muted)}
+.card.test{border:1.5px dashed var(--warn);background:var(--warn-soft)}
+.toast.busy::after{content:"";display:inline-block;width:12px;height:12px;margin-left:8px;vertical-align:-1px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
 .staff{display:flex;flex-direction:column;gap:8px;margin-top:12px}
 .staff-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm)}
 .staff-row span{flex:1;min-width:0;overflow-wrap:anywhere}
@@ -341,6 +343,7 @@ details.more summary{cursor:pointer;font-weight:600;color:var(--red-ink);min-hei
       <p class="muted" id="doneSub"></p>
     </div>
     <div class="docs" id="docs"></div>
+    <div style="margin-top:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><p class="toast" id="mailSt" hidden></p><button class="btn small" id="mailRetry" hidden>Noch mal senden</button></div>
     <div style="margin-top:26px;display:flex;gap:12px;flex-wrap:wrap"><button class="btn primary" id="next">Nächste Auslieferung →</button></div>
   </section>
 </main>
@@ -461,8 +464,11 @@ async function search(){
   if (n !== qN) return;
   $("#listErr").hidden = !error; if (error){ $("#listErr").textContent = "Suche geht gerade nicht: " + error.message; return; }
   const L = $("#list");
+  // Testfahrzeug: immer oben, speichert nichts, schickt die Dokumente nur an dich selbst
+  if (!q || /test/i.test(q)) data.unshift(TEST_DEAL);
   if (!data.length){ L.innerHTML = '<p class="empty">Kein unterschriebener Vertrag gefunden.</p>'; return; }
   L.innerHTML = data.map((r, i) => {
+    if (r.test) return '<button class="card test" data-i="' + i + '"><span class="nr">TEST · zum Ausprobieren</span><b>Testfahrzeug</b><span class="veh">Max Mustermann · VW Golf VIII. Es wird nichts gespeichert, die Dokumente gehen nur an dich.</span><span class="foot"><span class="pill open">Test</span></span></button>';
     const st = r.delivery_status === "done" ? '<span class="pill ok">✓ ausgeliefert ' + (r.delivered_at ? fmtD(new Date(r.delivered_at)) : "") + '</span>'
       : r.delivery_status === "open" ? '<span class="pill open">in Auslieferung · ' + esc(r.delivery_by || "") + '</span>' : "";
     return '<button class="card" data-i="' + i + '" style="animation-delay:' + Math.min(i, 12) * 30 + 'ms"><span class="nr">' + esc(r.contract_no || "") + ' · unterschrieben ' + (r.signed_at ? fmtD(new Date(r.signed_at)) : "") +
@@ -471,15 +477,17 @@ async function search(){
   L.querySelectorAll(".card").forEach(c => c.onclick = () => openDeal(data[+c.dataset.i]));
 }
 
+const TEST_DEAL = { test:true, id:"test", contract_no:"TEST", vehicle:"VW Golf VIII (Test)", customer_name:"Max Mustermann", seller_name:"Testverkäufer", original_path:"vorlagen/test-kaufvertrag.pdf" };
+
 /* ---------- Kaufvertrag auslesen (Seite 1) ---------- */
 const WMI = { WVW:"VW", WVG:"VW", WV1:"VW", WV2:"VW", WAU:"Audi", WUA:"Audi", TRU:"Audi", WBA:"BMW", WBS:"BMW", WBY:"BMW", WMW:"MINI", WDD:"Mercedes-Benz", WDB:"Mercedes-Benz", W1K:"Mercedes-Benz", W1N:"Mercedes-Benz", W1V:"Mercedes-Benz", WDC:"Mercedes-Benz",
   WF0:"Ford", WF1:"Ford", W0L:"Opel", W0V:"Opel", VSS:"Seat", VSE:"Seat", TMB:"Skoda", VF1:"Renault", VF3:"Peugeot", VF7:"Citroën", VR3:"Peugeot", VR7:"Citroën", VXK:"Opel", ZFA:"Fiat", ZFF:"Ferrari", ZAR:"Alfa Romeo", ZHW:"Lamborghini",
   WP0:"Porsche", WP1:"Porsche", JTD:"Toyota", JTN:"Toyota", JTM:"Toyota", SB1:"Toyota", VNK:"Toyota", NMT:"Toyota", JMZ:"Mazda", JMB:"Mitsubishi", JN1:"Nissan", SJN:"Nissan", VSK:"Nissan", JHM:"Honda", SHH:"Honda", KNA:"Kia", KNE:"Kia", U5Y:"Kia", KMH:"Hyundai", TMA:"Hyundai", NLH:"Hyundai",
   YV1:"Volvo", YV4:"Volvo", LVY:"Volvo", SAL:"Land Rover", SAJ:"Jaguar", VF8:"Smart", WME:"Smart", JSA:"Suzuki", TSM:"Suzuki", UU1:"Dacia", VWV:"VW", LRW:"Tesla", XP7:"Tesla", "5YJ":"Tesla", LSJ:"MG", SAR:"Rover", JF1:"Subaru", ZCF:"Iveco", LJ1:"BYD", LGX:"BYD" };
 async function readKv(path){
-  const { data, error } = await sb.storage.from("contracts").createSignedUrl(path, 300);
-  if (error) throw error;
-  const pdf = await pdfjsLib.getDocument({ url:data.signedUrl, disableAutoFetch:true, disableStream:true }).promise;
+  let url = path;
+  if (!path.startsWith("vorlagen/")){ const { data, error } = await sb.storage.from("contracts").createSignedUrl(path, 300); if (error) throw error; url = data.signedUrl; }
+  const pdf = await pdfjsLib.getDocument({ url, disableAutoFetch:true, disableStream:true }).promise;
   try {
     const page = await pdf.getPage(1), [x0, y0, x1, y1] = page.view, W = x1 - x0, H = y1 - y0;
     const it = (await page.getTextContent()).items.filter(i => i.str && i.str.trim()).map(i => ({ s:i.str.trim(), x:i.transform[4]-x0, y:i.transform[5]-y0 }));
@@ -525,6 +533,13 @@ async function openDeal(r){
   if (r.delivery_status === "done"){ return showDone(r); }
   const card = [...document.querySelectorAll(".card")].find(c => c.querySelector("b")?.textContent === r.customer_name); card?.classList.add("busy");
   try {
+    if (r.test){
+      const kv = await readKv(r.original_path), data = fresh(r, kv);
+      Object.assign(D, { deal:r, id:"test", data, kv, sig:{}, files:null, test:true });
+      mergeKv(D.data, kv); $("#kvWarn").hidden = false; $("#kvWarn").textContent = "Testauslieferung: Es wird nichts gespeichert. Am Ende gehen die beiden Dokumente nur an deine eigene Mailadresse.";
+      renderDel(); show("#vDel"); return;
+    }
+    D.test = false;
     // eigene offene Auslieferung fortsetzen, sonst neu anlegen
     let { data: v } = await sb.from("deliveries").select("*").eq("deal_id", r.id).eq("status", "open").eq("created_by", me.id).order("created_at", { ascending:false }).limit(1).maybeSingle();
     let kv = null, kvErr = null;
@@ -553,7 +568,7 @@ function mergeKv(d, kv){
     if (/finanz/.test(w)) d.zahlung.art = "finanzierung"; else if (/überweis|ueberweis/.test(w)) d.zahlung.art = "ueberweisung";
     if (kv.zahlung?.inzahlung) d.zahlung.inzahlung = true; }
 }
-const save = () => { clearTimeout(D.saveT); const id = D.id, data = D.data; D.saveT = setTimeout(() => sb.from("deliveries").update({ data }).eq("id", id).then(r => r.error && console.warn("Speichern", r.error)), 800); };
+const save = () => { if (D.test) return; clearTimeout(D.saveT); const id = D.id, data = D.data; D.saveT = setTimeout(() => sb.from("deliveries").update({ data }).eq("id", id).then(r => r.error && console.warn("Speichern", r.error)), 800); };
 
 function renderDel(){
   const d = D.data, fz = d.fz, kd = d.kunde;
@@ -583,7 +598,7 @@ function renderDel(){
 [["#km", v => D.data.kmAus = v], ["#sonst", v => D.data.sonstiges = v], ["#bem", v => D.data.bemerkungen = v]]
   .forEach(([q, f]) => $(q).addEventListener("input", e => { f(e.target.value.trim()); save(); progress(); }));
 $("#km").addEventListener("blur", e => { const n = e.target.value.replace(/\D/g, ""); if (n){ e.target.value = D.data.kmAus = Number(n).toLocaleString("de-DE"); save(); } });
-$("#back").onclick = () => { clearTimeout(D.saveT); if (D.id) sb.from("deliveries").update({ data:D.data }).eq("id", D.id); showList(); };
+$("#back").onclick = () => { clearTimeout(D.saveT); if (D.id && !D.test) sb.from("deliveries").update({ data:D.data }).eq("id", D.id); showList(); };
 function cgSum(){
   const d = D.data, dev = APDF.PRUEF.filter(([k]) => d.pruef[k] === false).map(([, , , l]) => l);
   if (d.probefahrt === false) dev.unshift("keine Probefahrt");
@@ -733,6 +748,12 @@ async function finish(){
       const cert = await APDF.buildCert(PDFLib, tpl, dd, sig), list = await APDF.buildList(PDFLib, logo, dd, sig);
       D.files = { cert, list, certSha: await sha256(cert), listSha: await sha256(list), dd };
     }
+    if (D.test){
+      const r = { ...D.deal, delivered_at:new Date().toISOString(), delivery_by:D.data.auslieferer };
+      showDone(r, { cert_path:"lokal", list_path:"lokal", local:D.files });
+      mailDocs({ test:true, cert:b64(D.files.cert), list:b64(D.files.list), vorgang:"TEST", kunde:D.data.kunde.name, fahrzeug:[D.data.fz.hersteller, D.data.fz.modell].filter(Boolean).join(" ") });
+      return;
+    }
     const base = D.deal.id + "/auslieferung/" + D.id, cp = base + "-uebergabezertifikat.pdf", lp = base + "-checkliste.pdf";
     for (const [p, bytes] of [[cp, D.files.cert], [lp, D.files.list]]){
       const r = await sb.storage.from("contracts").upload(p, new Blob([bytes], { type:"application/pdf" }), { contentType:"application/pdf", upsert:false });
@@ -742,10 +763,12 @@ async function finish(){
     const f = await sb.rpc("finish_delivery", { p_id:D.id, p_data:data, p_cert_path:cp, p_cert_sha:D.files.certSha, p_list_path:lp, p_list_sha:D.files.listSha });
     if (f.error) throw f.error;
     showDone({ ...D.deal, delivery_id:D.id, delivered_at:new Date().toISOString(), delivery_by: D.data.auslieferer }, { cert_path:cp, list_path:lp, local:D.files });
+    mailDocs({ delivery_id:D.id });
   } catch(e){ err.textContent = "Abschließen hat nicht geklappt (" + (e.message || e) + "). Die Unterschriften bleiben erhalten, bitte noch einmal tippen."; err.hidden = false; }
   finally { b.disabled = false; b.classList.remove("busy"); }
 }
 async function showDone(r, files){
+  $("#mailSt").hidden = true; $("#mailRetry").hidden = true;
   if (!files){ const { data } = await sb.from("deliveries").select("cert_path,list_path,done_at,data").eq("id", r.delivery_id).maybeSingle(); files = data || {}; }
   $("#doneNr").textContent = "Vorgang " + (r.contract_no || "");
   $("#doneSub").textContent = r.customer_name + " · " + (r.vehicle || "") + " · ausgeliefert " + (r.delivered_at ? fmtD(new Date(r.delivered_at)) + ", " + fmtT(new Date(r.delivered_at)) + " Uhr" : "") + (r.delivery_by ? " von " + r.delivery_by : "");
@@ -760,6 +783,19 @@ async function showDone(r, files){
     if (w && url) w.location = url; else if (url) location.href = url;
   });
   show("#vDone");
+}
+const b64 = u => { let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
+/* Beide Dokumente per Mail an die ausliefernde Person (der Kunde bekommt nichts) */
+async function mailDocs(body){
+  const m = $("#mailSt"); m.hidden = false; m.className = "toast busy"; m.textContent = "Dokumente werden an dich gemailt …"; $("#mailRetry").hidden = true;
+  try {
+    const r = await sb.functions.invoke("send-delivery", { body });
+    if (r.error || r.data?.error) throw new Error(r.data?.error || r.error.message);
+    m.className = "toast"; m.textContent = "✓ Beide Dokumente sind per Mail an " + r.data.to + " unterwegs.";
+  } catch(e){
+    m.className = "toast err"; m.textContent = "Mail konnte nicht verschickt werden (" + (e.message || e) + "). Die Dokumente sind trotzdem gespeichert.";
+    $("#mailRetry").hidden = false; $("#mailRetry").onclick = () => mailDocs(body);
+  }
 }
 $("#next").onclick = () => { $("#q").value = ""; showList(); };
 
