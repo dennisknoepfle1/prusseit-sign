@@ -282,7 +282,7 @@ details.more summary{cursor:pointer;font-weight:600;color:var(--red-ink);min-hei
         <h1 id="dTitle">Auslieferung</h1>
         <p class="muted" id="dSub" style="margin-top:6px"></p>
       </div>
-      <button class="btn ghost small" id="back">← Andere Auslieferung</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn ghost small" id="back">← Andere Auslieferung</button><button class="btn ghost small" id="cancelDel" style="color:var(--red)">Auslieferung abbrechen</button></div>
     </div>
     <div class="toast warn" id="kvWarn" hidden style="margin-top:16px"></div>
 
@@ -625,6 +625,14 @@ function renderDel(){
 [["#km", v => D.data.kmAus = v], ["#sonst", v => D.data.sonstiges = v], ["#bem", v => D.data.bemerkungen = v]]
   .forEach(([q, f]) => $(q).addEventListener("input", e => { f(e.target.value.trim()); save(); progress(); }));
 $("#km").addEventListener("blur", e => { const n = e.target.value.replace(/\D/g, ""); if (n){ e.target.value = D.data.kmAus = Number(n).toLocaleString("de-DE"); save(); } });
+/* Versehentlich gestartet: Auslieferung abbrechen (zweimal tippen), das Auto ist danach wieder frei */
+$("#cancelDel").onclick = async () => {
+  const b = $("#cancelDel");
+  if (!b.dataset.sure){ b.dataset.sure = "1"; b.textContent = "Wirklich abbrechen? Nochmal tippen"; clearTimeout(b._t); b._t = setTimeout(() => { delete b.dataset.sure; b.textContent = "Auslieferung abbrechen"; }, 4000); return; }
+  clearTimeout(b._t); delete b.dataset.sure; b.textContent = "Auslieferung abbrechen"; clearTimeout(D.saveT);
+  if (!D.test){ const r = await sb.from("deliveries").update({ status:"cancelled" }).eq("id", D.id); if (r.error){ alert("Abbrechen ging nicht: " + r.error.message); return; } }
+  D.id = null; showList();
+};
 $("#back").onclick = () => { clearTimeout(D.saveT); if (D.id && !D.test) sb.from("deliveries").update({ data:D.data }).eq("id", D.id); showList(); };
 function cgSum(){
   const d = D.data, dev = APDF.PRUEF.filter(([k]) => d.pruef[k] === false).map(([, , , l]) => l);
