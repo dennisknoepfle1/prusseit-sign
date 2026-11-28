@@ -392,6 +392,7 @@ details.more summary{cursor:pointer;font-weight:600;color:var(--red-ink);min-hei
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script src="auslieferung-pdf.js"></script>
+<script src="confetti.js"></script>
 <script>
 "use strict";
 const $ = q => document.querySelector(q);
@@ -838,6 +839,7 @@ async function finish(){
     const f = await sb.rpc("finish_delivery", { p_id:D.id, p_data:data, p_cert_path:cp, p_cert_sha:D.files.certSha, p_list_path:lp, p_list_sha:D.files.listSha });
     if (f.error) throw f.error;
     showDone({ ...D.deal, delivery_id:D.id, delivered_at:new Date().toISOString(), delivery_by: D.data.auslieferer }, { cert_path:cp, list_path:lp, local:D.files, scans:scanPaths });
+    try { window.prusseitConfetti?.("Gute Fahrt" + (D.data.kunde?.name ? ", " + D.data.kunde.name : "") + "! 🚗"); } catch {}
     mailDocs({ delivery_id:D.id });
   } catch(e){ err.textContent = "Abschließen hat nicht geklappt (" + (e.message || e) + "). Die Unterschriften bleiben erhalten, bitte noch einmal tippen."; err.hidden = false; }
   finally { b.disabled = false; b.classList.remove("busy"); }
